@@ -169,9 +169,6 @@ class BrightDataSERPAPIWrapper(BrightDataAPIWrapper):
             json=request_params,
             headers=self._get_headers(),
         )
-        print(f"{BRIGHTDATA_API_URL}/request",
-            request_params,
-            self._get_headers())
         
         return response.text
 
@@ -259,4 +256,5 @@ class BrightDataWebScraperAPIWrapper(BrightDataAPIWrapper):
                 headers=self._get_headers()
             ) as response:
             
+
                 return response
