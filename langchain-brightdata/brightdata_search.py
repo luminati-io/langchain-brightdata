@@ -102,6 +102,7 @@ class BrightDataSERP(BaseTool):
     handle_tool_error: bool = True
 
     search_engine: str = "google"
+    zone: str = "serp"
     country: str = "us"
     language: str = "en"
     results_count: Optional[int] = 10
@@ -124,6 +125,7 @@ class BrightDataSERP(BaseTool):
         self,
         query: str,
         search_engine: Optional[str] = "google",
+        zone: Optional[str] = None,
         country: Optional[str] = None,
         language: Optional[str] = None,
         results_count: Optional[int] = None,
@@ -135,6 +137,7 @@ class BrightDataSERP(BaseTool):
         """Execute a search query using the Bright Data SERP API."""
         try:
             search_engine_to_use = search_engine if search_engine is not None else self.search_engine
+            zone_to_use = zone if zone is not None else self.zone
             country_to_use = country if country is not None else self.country
             language_to_use = language if language is not None else self.language
             results_count_to_use = results_count if results_count is not None else self.results_count
@@ -145,6 +148,7 @@ class BrightDataSERP(BaseTool):
             results = self.api_wrapper.get_search_results(
                 query=query,
                 search_engine=search_engine_to_use,
+                zone=zone_to_use,
                 country=country_to_use,
                 language=language_to_use,
                 results_count=results_count_to_use,
