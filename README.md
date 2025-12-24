@@ -64,16 +64,17 @@ results = serp_tool.invoke({
 
 #### 🎛️ Customization Options
 
-| Parameter | Type | Description |
-|:----------|:-----|:------------|
-| `query` | str | The search query to perform |
-| `search_engine` | str | Search engine to use (default: "google") |
-| `country` | str | Two-letter country code for localized results (default: "us") |
-| `language` | str | Two-letter language code (default: "en") |
-| `results_count` | int | Number of results to return (default: 10) |
-| `search_type` | str | Type of search: None (web), "isch" (images), "shop", "nws" (news), "jobs" |
-| `device_type` | str | Device type: None (desktop), "mobile", "ios", "android" |
-| `parse_results` | bool | Whether to return structured JSON (default: False) |
+| Parameter       | Type | Description                                                               |
+| :-------------- | :--- | :------------------------------------------------------------------------ |
+| `query`         | str  | The search query to perform                                               |
+| `search_engine` | str  | Search engine to use (default: "google")                                  |
+| `zone`          | str  | Bright Data zone to use (default: "serp")                                 |
+| `country`       | str  | Two-letter country code for localized results (default: "us")             |
+| `language`      | str  | Two-letter language code (default: "en")                                  |
+| `results_count` | int  | Number of results to return (default: 10)                                 |
+| `search_type`   | str  | Type of search: None (web), "isch" (images), "shop", "nws" (news), "jobs" |
+| `device_type`   | str  | Device type: None (desktop), "mobile", "ios", "android"                   |
+| `parse_results` | bool | Whether to return structured JSON (default: False)                        |
 
 ### 🌐 BrightDataUnlocker
 
@@ -97,13 +98,13 @@ result = unlocker_tool.invoke({
 
 #### 🎛️ Customization Options
 
-| Parameter | Type | Description |
-|:----------|:-----|:------------|
-| `url` | str | The URL to access |
-| `format` | str | Format of the response content (default: "raw") |
-| `country` | str | Two-letter country code for geo-specific access (e.g., "us", "gb") |
-| `zone` | str | Bright Data zone to use (default: "unblocker") |
-| `data_format` | str | Output format: None (HTML), "markdown", or "screenshot" |
+| Parameter     | Type | Description                                                        |
+| :------------ | :--- | :----------------------------------------------------------------- |
+| `url`         | str  | The URL to access                                                  |
+| `format`      | str  | Format of the response content (default: "raw")                    |
+| `country`     | str  | Two-letter country code for geo-specific access (e.g., "us", "gb") |
+| `zone`        | str  | Bright Data zone to use (default: "unblocker")                     |
+| `data_format` | str  | Output format: None (HTML), "markdown", or "screenshot"            |
 
 ### 📊 BrightDataWebScraperAPI
 
@@ -130,19 +131,19 @@ linkedin_results = scraper_tool.invoke({
 
 #### 🎛️ Customization Options
 
-| Parameter | Type | Description |
-|:----------|:-----|:------------|
-| `url` | str | The URL to extract data from |
-| `dataset_type` | str | Type of dataset to use (e.g., "amazon_product") |
-| `zipcode` | str | Optional zipcode for location-specific data |
+| Parameter      | Type | Description                                     |
+| :------------- | :--- | :---------------------------------------------- |
+| `url`          | str  | The URL to extract data from                    |
+| `dataset_type` | str  | Type of dataset to use (e.g., "amazon_product") |
+| `zipcode`      | str  | Optional zipcode for location-specific data     |
 
 #### 📂 Available Dataset Types
 
-| Dataset Type | Description |
-|:-------------|:------------|
-| `amazon_product` | Extract detailed Amazon product data |
-| `amazon_product_reviews` | Extract Amazon product reviews |
-| `linkedin_person_profile` | Extract LinkedIn person profile data |
+| Dataset Type               | Description                           |
+| :------------------------- | :------------------------------------ |
+| `amazon_product`           | Extract detailed Amazon product data  |
+| `amazon_product_reviews`   | Extract Amazon product reviews        |
+| `linkedin_person_profile`  | Extract LinkedIn person profile data  |
 | `linkedin_company_profile` | Extract LinkedIn company profile data |
 
 
