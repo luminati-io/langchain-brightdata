@@ -8,7 +8,6 @@ from langchain_core.utils import get_from_dict_or_env
 from pydantic import BaseModel, ConfigDict, SecretStr, model_validator
 import urllib.parse
 
-# Base API URL for Bright Data
 BRIGHTDATA_API_URL = "https://api.brightdata.com"
 
 class BrightDataAPIWrapper(BaseModel):

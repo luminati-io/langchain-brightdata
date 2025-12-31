@@ -104,7 +104,6 @@ DATASETS = [
         "description": "Extract structured LinkedIn people search data. Requires URL, first_name, and last_name.",
         "inputs": ["url", "first_name", "last_name"],
     },
-    # Business
     {
         "id": "crunchbase_company",
         "dataset_id": "gd_l1vijqt9jfj7olije",
@@ -117,7 +116,6 @@ DATASETS = [
         "description": "Extract structured ZoomInfo company profile data. Requires a valid ZoomInfo company URL.",
         "inputs": ["url"],
     },
-    # Instagram
     {
         "id": "instagram_profiles",
         "dataset_id": "gd_l1vikfch901nx3by4",
@@ -142,7 +140,6 @@ DATASETS = [
         "description": "Extract structured Instagram comments data. Requires a valid Instagram post URL.",
         "inputs": ["url"],
     },
-    # Facebook
     {
         "id": "facebook_posts",
         "dataset_id": "gd_lyclm1571iy3mv57zw",
@@ -285,28 +282,18 @@ DATASET_DEFAULTS = {d["id"]: d.get("defaults", {}) for d in DATASETS}
 DATASET_FIXED_VALUES = {d["id"]: d.get("fixed_values", {}) for d in DATASETS}
 DATASET_DESCRIPTIONS = {d["id"]: d["description"] for d in DATASETS}
 
-# Define Literal type for dataset_type to help LLMs understand available options
 DatasetType = Literal[
-    # E-commerce
     "amazon_product", "amazon_product_reviews", "amazon_product_search",
     "walmart_product", "walmart_seller", "ebay_product", "homedepot_products",
     "zara_products", "etsy_products", "bestbuy_products",
-    # LinkedIn
     "linkedin_person_profile", "linkedin_company_profile", "linkedin_job_listings",
     "linkedin_posts", "linkedin_people_search",
-    # Business
     "crunchbase_company", "zoominfo_company_profile",
-    # Instagram
     "instagram_profiles", "instagram_posts", "instagram_reels", "instagram_comments",
-    # Facebook
     "facebook_posts", "facebook_marketplace_listings", "facebook_company_reviews", "facebook_events",
-    # TikTok
     "tiktok_profiles", "tiktok_posts", "tiktok_shop", "tiktok_comments",
-    # Google
     "google_maps_reviews", "google_shopping", "google_play_store",
-    # YouTube
     "youtube_profiles", "youtube_videos", "youtube_comments",
-    # Other platforms
     "apple_app_store", "reuter_news", "github_repository_file", "yahoo_finance_business",
     "x_posts", "zillow_properties_listing", "booking_hotel_listings", "reddit_posts",
 ]
@@ -433,7 +420,6 @@ class BrightDataWebScraperAPI(BaseTool):
     ) -> Dict[str, Any]:
         """Execute a structured data extraction using the Bright Data Dataset API."""
         try:
-            # Validate dataset type
             if dataset_type not in DATASET_MAPPING:
                 raise ToolException(
                     f"Invalid dataset type: {dataset_type}. "
