@@ -1,152 +1,253 @@
-# 🌟 langchain-brightdata
+<div align="center">
 
-[![PyPI - Version](https://img.shields.io/pypi/v/langchain-brightdata?style=flat-square&label=PyPI)](https://pypi.org/project/langchain-brightdata/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![LangChain](https://img.shields.io/badge/LangChain-Integration-blue)](https://python.langchain.com)
+# langchain-brightdata
 
-**Access powerful web data capabilities for your AI agents with [Bright Data](https://brightdata.com)!** 🚀
+**LangChain integration for Bright Data's web data APIs**
 
-## 📋 Overview
+[![PyPI version](https://img.shields.io/pypi/v/langchain-brightdata?color=blue)](https://pypi.org/project/langchain-brightdata/)
+[![Python](https://img.shields.io/pypi/pyversions/langchain-brightdata)](https://pypi.org/project/langchain-brightdata/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
+[![Downloads](https://img.shields.io/pypi/dm/langchain-brightdata)](https://pypi.org/project/langchain-brightdata/)
 
-This package provides LangChain integrations for Bright Data's suite of web data collection tools, allowing your AI agents to:
+[Installation](#installation) •
+[Quick Start](#quick-start) •
+[Tools](#tools) •
+[Configuration](#configuration) •
+[Resources](#resources)
 
-- 🔍 Collect search engine results with geo-targeting
-- 🌐 Access websites that might be geo-restricted or protected by anti-bot systems
-- 📊 Extract structured data from popular websites like Amazon, LinkedIn, and more
+</div>
 
-Perfect for AI agents that need real-time web data!
+---
 
-## 🛠️ Installation
+## Overview
+
+**langchain-brightdata** provides LangChain tools for [Bright Data](https://brightdata.com)'s web data APIs, enabling your AI agents to:
+
+- **Search** - Query search engines with geo-targeting and language customization
+- **Unlock** - Access geo-restricted or bot-protected websites
+- **Scrape** - Extract structured data from Amazon, LinkedIn, and 100+ domains
+
+---
+
+## Installation
 
 ```bash
 pip install langchain-brightdata
 ```
 
-## 🔑 Setup
+**Requirements:** Python 3.9+
 
-You'll need a Bright Data API key to use these tools. Set it as an environment variable:
+---
+
+## Quick Start
+
+### 1. Get your API key
+
+Sign up at [Bright Data](https://brightdata.com) and get your API key from the dashboard.
+
+### 2. Set up authentication
 
 ```python
 import os
 os.environ["BRIGHT_DATA_API_KEY"] = "your-api-key"
 ```
 
-Or pass it directly when initializing tools:
+Or pass it directly:
 
 ```python
 from langchain_brightdata import BrightDataSERP
 tool = BrightDataSERP(bright_data_api_key="your-api-key")
 ```
 
-## 🧰 Available Tools
+### 3. Use with LangChain agents
 
-### 🔍 BrightDataSERP
+```python
+from langchain_brightdata import BrightDataSERP, BrightDataUnlocker, BrightDataWebScraperAPI
+from langchain.agents import initialize_agent, AgentType
+from langchain_openai import ChatOpenAI
 
-Perform search engine queries with customizable geo-targeting, device type, and language settings.
+# Initialize tools
+tools = [
+    BrightDataSERP(),
+    BrightDataUnlocker(),
+    BrightDataWebScraperAPI()
+]
+
+# Create agent
+llm = ChatOpenAI(model="gpt-4")
+agent = initialize_agent(tools, llm, agent=AgentType.OPENAI_FUNCTIONS)
+
+# Run
+agent.run("Search for the latest AI news and summarize the top result")
+```
+
+---
+
+## Tools
+
+### BrightDataSERP
+
+Search engine results with geo-targeting and customization.
 
 ```python
 from langchain_brightdata import BrightDataSERP
 
-# Basic usage
-serp_tool = BrightDataSERP(bright_data_api_key="your-api-key")
-results = serp_tool.invoke("latest AI research papers")
+serp = BrightDataSERP()
 
-# Advanced usage with parameters
-results = serp_tool.invoke({
-    "query": "best electric vehicles",
-    "country": "de",  # Get results as if searching from Germany
-    "language": "de",  # Get results in German
-    "search_type": "shop",  # Get shopping results
-    "device_type": "mobile",  # Simulate a mobile device
-    "results_count": 15
+# Simple search
+results = serp.invoke("latest AI research")
+
+# Advanced search
+results = serp.invoke({
+    "query": "electric vehicles",
+    "country": "de",
+    "language": "de",
+    "search_type": "news",
+    "results_count": 20
 })
 ```
 
-#### 🎛️ Customization Options
+#### Parameters
 
-| Parameter | Type | Description |
-|:----------|:-----|:------------|
-| `query` | str | The search query to perform |
-| `search_engine` | str | Search engine to use (default: "google") |
-| `country` | str | Two-letter country code for localized results (default: "us") |
-| `language` | str | Two-letter language code (default: "en") |
-| `results_count` | int | Number of results to return (default: 10) |
-| `search_type` | str | Type of search: None (web), "isch" (images), "shop", "nws" (news), "jobs" |
-| `device_type` | str | Device type: None (desktop), "mobile", "ios", "android" |
-| `parse_results` | bool | Whether to return structured JSON (default: False) |
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `query` | str | required | Search query |
+| `zone` | str | `"serp"` | Bright Data zone name |
+| `search_engine` | str | `"google"` | Search engine (`google`, `bing`, `yahoo`) |
+| `country` | str | `"us"` | Two-letter country code |
+| `language` | str | `"en"` | Two-letter language code |
+| `results_count` | int | `10` | Number of results (max 100) |
+| `search_type` | str | `None` | `None` (web), `"isch"` (images), `"shop"`, `"nws"` (news), `"jobs"` |
+| `device_type` | str | `None` | `None` (desktop), `"mobile"`, `"ios"`, `"android"` |
+| `parse_results` | bool | `False` | Return structured JSON |
 
-### 🌐 BrightDataUnlocker
+---
 
-Access ANY public website that might be geo-restricted or protected by anti-bot systems.
+### BrightDataUnlocker
+
+Access any public website, bypassing geo-restrictions and bot protection.
 
 ```python
 from langchain_brightdata import BrightDataUnlocker
 
-# Basic usage
-unlocker_tool = BrightDataUnlocker(bright_data_api_key="your-api-key")
-result = unlocker_tool.invoke("https://example.com")
+unlocker = BrightDataUnlocker()
 
-# Advanced usage with parameters
-result = unlocker_tool.invoke({
-    "url": "https://example.com/region-restricted-content",
-    "country": "gb",  # Access as if from Great Britain
-    "data_format": "markdown",  # Get content in markdown format
-    "zone": "unlocker"  # Use the unlocker zone
+# Simple access
+content = unlocker.invoke("https://example.com")
+
+# With options
+content = unlocker.invoke({
+    "url": "https://example.com/restricted",
+    "country": "gb",
+    "data_format": "markdown"
 })
 ```
 
-#### 🎛️ Customization Options
+#### Parameters
 
-| Parameter | Type | Description |
-|:----------|:-----|:------------|
-| `url` | str | The URL to access |
-| `format` | str | Format of the response content (default: "raw") |
-| `country` | str | Two-letter country code for geo-specific access (e.g., "us", "gb") |
-| `zone` | str | Bright Data zone to use (default: "unblocker") |
-| `data_format` | str | Output format: None (HTML), "markdown", or "screenshot" |
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `url` | str | required | URL to access |
+| `zone` | str | `"unlocker"` | Bright Data zone name |
+| `country` | str | `None` | Two-letter country code |
+| `data_format` | str | `None` | `None` (HTML), `"markdown"`, `"screenshot"` |
 
-### 📊 BrightDataWebScraperAPI
+---
 
-Extract structured data from 100+ popular domains, including Amazon, LinkedIn, and more.
+### BrightDataWebScraperAPI
+
+Extract structured data from popular websites.
 
 ```python
 from langchain_brightdata import BrightDataWebScraperAPI
 
-# Initialize the tool
-scraper_tool = BrightDataWebScraperAPI(bright_data_api_key="your-api-key")
+scraper = BrightDataWebScraperAPI()
 
-# Extract Amazon product data
-results = scraper_tool.invoke({
+# Amazon product
+product = scraper.invoke({
     "url": "https://www.amazon.com/dp/B08L5TNJHG",
     "dataset_type": "amazon_product"
 })
 
-# Extract LinkedIn profile data
-linkedin_results = scraper_tool.invoke({
+# LinkedIn profile
+profile = scraper.invoke({
     "url": "https://www.linkedin.com/in/satyanadella/",
     "dataset_type": "linkedin_person_profile"
 })
 ```
 
-#### 🎛️ Customization Options
+#### Parameters
 
-| Parameter | Type | Description |
-|:----------|:-----|:------------|
-| `url` | str | The URL to extract data from |
-| `dataset_type` | str | Type of dataset to use (e.g., "amazon_product") |
-| `zipcode` | str | Optional zipcode for location-specific data |
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `url` | str | required | URL to scrape |
+| `dataset_type` | str | required | Type of data to extract |
+| `zipcode` | str | `None` | Zipcode for location-specific data |
 
-#### 📂 Available Dataset Types
+#### Supported Dataset Types
 
-| Dataset Type | Description |
-|:-------------|:------------|
-| `amazon_product` | Extract detailed Amazon product data |
-| `amazon_product_reviews` | Extract Amazon product reviews |
-| `linkedin_person_profile` | Extract LinkedIn person profile data |
-| `linkedin_company_profile` | Extract LinkedIn company profile data |
+| Type | Description |
+|------|-------------|
+| `amazon_product` | Product details, pricing, specs |
+| `amazon_product_reviews` | Customer reviews and ratings |
+| `linkedin_person_profile` | Professional profile data |
+| `linkedin_company_profile` | Company information |
 
+---
 
-## 📚 Additional Resources
+## Configuration
 
-- [Bright Data Official Documentation](https://docs.brightdata.com/introduction)
-- [LangChain Documentation](https://python.langchain.com/docs/integrations/tools/brightdata)
+### Zone Configuration
+
+Bright Data uses "zones" to manage different API configurations. You can set the zone at initialization or per-request.
+
+#### Setting zone at initialization
+
+```python
+from langchain_brightdata import BrightDataSERP, BrightDataUnlocker
+
+# SERP with custom zone
+serp = BrightDataSERP(
+    bright_data_api_key="your-api-key",
+    zone="my_serp_zone"
+)
+
+# Unlocker with custom zone
+unlocker = BrightDataUnlocker(
+    bright_data_api_key="your-api-key",
+    zone="my_unlocker_zone"
+)
+```
+
+#### Setting zone per-request
+
+```python
+# Override zone for a specific request
+results = serp.invoke({
+    "query": "AI news",
+    "zone": "different_zone"
+})
+```
+
+#### Default zones
+
+| Tool | Default Zone |
+|------|--------------|
+| `BrightDataSERP` | `serp` |
+| `BrightDataUnlocker` | `unlocker` |
+
+> **Note:** Zone names must match the zones configured in your [Bright Data dashboard](https://brightdata.com/cp/zones).
+
+---
+
+## Resources
+
+- [Bright Data Documentation](https://docs.brightdata.com/integrations/langchain)
+- [LangChain Tools Guide](https://docs.langchain.com/oss/python/integrations/providers/brightdata)
+- [API Reference](https://docs.brightdata.com/api-reference)
+
+---
+
+## License
+
+MIT License - see [LICENSE](LICENSE) for details.
