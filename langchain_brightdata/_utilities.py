@@ -218,7 +218,7 @@ class BrightDataWebScraperAPIWrapper(BrightDataAPIWrapper):
         )
 
         if response.status_code == 200:
-            return response.json()
+            return response.text
 
         if response.status_code == 202:
             response_data = response.json()
@@ -237,7 +237,7 @@ class BrightDataWebScraperAPIWrapper(BrightDataAPIWrapper):
                 )
 
                 if snapshot_response.status_code == 200:
-                    return snapshot_response.json()
+                    return snapshot_response.text
 
                 if snapshot_response.status_code == 202:
                     status_data = snapshot_response.json()
