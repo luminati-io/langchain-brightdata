@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "langchain-brightdata"
-version = "0.1.0"
+version = "0.1.4"
 description = "LangChain integration for Bright Data web scraping and SERP APIs"
 readme = "README.md"
 license = "MIT"
@@ -55,11 +55,11 @@ Repository = "https://github.com/luminati-io/langchain-brightdata"
 Documentation = "https://github.com/luminati-io/langchain-brightdata#readme"
 
 [tool.hatch.build.targets.wheel]
-packages = ["langchain-brightdata"]
+packages = ["langchain_brightdata"]
 
 [tool.hatch.build.targets.sdist]
 include = [
-    "/langchain-brightdata",
+    "/langchain_brightdata",
     "/README.md",
     "/LICENSE",
 ]
