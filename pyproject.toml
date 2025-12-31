@@ -1,0 +1,76 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "langchain-brightdata"
+version = "0.1.0"
+description = "LangChain integration for Bright Data web scraping and SERP APIs"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.9"
+authors = [
+    { name = "Meir Kadosh" }
+]
+keywords = [
+    "langchain",
+    "brightdata",
+    "bright-data",
+    "web-scraping",
+    "serp",
+    "ai",
+    "llm",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Internet :: WWW/HTTP :: Indexing/Search",
+]
+dependencies = [
+    "langchain-core>=0.1.0",
+    "pydantic>=2.0.0",
+    "requests>=2.28.0",
+    "aiohttp>=3.8.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/luminati-io/langchain-brightdata"
+Repository = "https://github.com/luminati-io/langchain-brightdata"
+Documentation = "https://github.com/luminati-io/langchain-brightdata#readme"
+
+[tool.hatch.build.targets.wheel]
+packages = ["langchain-brightdata"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/langchain-brightdata",
+    "/README.md",
+    "/LICENSE",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+
+[tool.black]
+line-length = 100
+target-version = ["py39", "py310", "py311", "py312"]

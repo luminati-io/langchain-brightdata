@@ -10,9 +10,18 @@ from ._utilities import BrightDataSERPAPIWrapper
 
 class BrightDataSERPInput(BaseModel):
     """Input for BrightData's SERP API."""
-    
+
     query: str = Field(description="Search query to perform with the SERP API")
-    
+
+    zone: Optional[str] = Field(
+        default=None,
+        description="""Bright Data SERP API zone name.
+
+        This should match the zone name configured in your Bright Data account.
+        Default is "serp".
+        """
+    )
+
     search_engine: Optional[str] = Field(
         default="google",
         description="""Search engine to use for the query.
@@ -101,6 +110,7 @@ class BrightDataSERP(BaseTool):
     args_schema: Type[BaseModel] = BrightDataSERPInput
     handle_tool_error: bool = True
 
+    zone: str = "serp"
     search_engine: str = "google"
     country: str = "us"
     language: str = "en"
@@ -123,6 +133,7 @@ class BrightDataSERP(BaseTool):
     def _run(
         self,
         query: str,
+        zone: Optional[str] = None,
         search_engine: Optional[str] = "google",
         country: Optional[str] = None,
         language: Optional[str] = None,
@@ -134,6 +145,7 @@ class BrightDataSERP(BaseTool):
     ) -> Dict[str, Any]:
         """Execute a search query using the Bright Data SERP API."""
         try:
+            zone_to_use = zone if zone is not None else self.zone
             search_engine_to_use = search_engine if search_engine is not None else self.search_engine
             country_to_use = country if country is not None else self.country
             language_to_use = language if language is not None else self.language
@@ -144,6 +156,7 @@ class BrightDataSERP(BaseTool):
 
             results = self.api_wrapper.get_search_results(
                 query=query,
+                zone=zone_to_use,
                 search_engine=search_engine_to_use,
                 country=country_to_use,
                 language=language_to_use,
