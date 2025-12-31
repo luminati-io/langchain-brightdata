@@ -1,5 +1,6 @@
 """Utility for Bright Data API interactions."""
 import json
+import time
 from typing import Any, Dict, List, Literal, Optional
 import aiohttp
 import requests
@@ -119,11 +120,9 @@ class BrightDataSERPAPIWrapper(BrightDataAPIWrapper):
         Returns:
             Dictionary containing the search results
         """
-        # Build the search URL
         query = urllib.parse.quote(query)
         url = f"https://www.{search_engine}.com/search?q={query}"
         
-        # Add parameters to the URL
         params = []
         
         if country:
@@ -151,11 +150,9 @@ class BrightDataSERPAPIWrapper(BrightDataAPIWrapper):
             elif device_type == "android":
                 params.append("brd_mobile=android")
         
-        # Combine parameters with the URL
         if params:
             url += "&" + "&".join(params)
         
-        # Set up the API request parameters
         request_params = {
             "zone": zone,
             "url": url,
@@ -183,71 +180,112 @@ class BrightDataWebScraperAPIWrapper(BrightDataAPIWrapper):
     def get_dataset_data(
         self,
         dataset_id: str,
-        url: str,
+        url: Optional[str] = None,
         zipcode: Optional[str] = None,
         additional_params: Optional[Dict[str, Any]] = None,
+        max_poll_attempts: int = 60,
+        poll_interval: int = 1,
     ) -> Dict:
         """Get structured data from a Bright Data Dataset.
-        
+
         Args:
             dataset_id: The ID of the Bright Data Dataset to query
-            url: URL to extract data from
+            url: URL to extract data from (required for most datasets)
             zipcode: Optional zipcode for location-specific data
             additional_params: Any additional parameters to include in the request
-            
+            max_poll_attempts: Maximum number of polling attempts (default: 60)
+            poll_interval: Seconds to wait between polls (default: 10)
+
         Returns:
             Dictionary containing the extracted structured data
         """
-        # Build request data
-        request_data = {"url": url}
-        
+        request_data = {}
+
+        if url:
+            request_data["url"] = url
+
         if zipcode:
             request_data["zipcode"] = zipcode
-            
+
         if additional_params:
-            request_data.update(additional_params)
-            
+            filtered_params = {k: v for k, v in additional_params.items() if v is not None and v != ""}
+            request_data.update(filtered_params)
+
         response = requests.post(
             f"{BRIGHTDATA_API_URL}/datasets/v3/scrape",
             params={"dataset_id": dataset_id, "include_errors": "true"},
             json=[request_data],
             headers=self._get_headers(),
         )
-        
-        if response.status_code != 200:
-            error_message = f"Error {response.status_code}: {response.text}"
-            raise ValueError(error_message)
-            
-        return response.json()
+
+        if response.status_code == 200:
+            return response.json()
+
+        if response.status_code == 202:
+            response_data = response.json()
+            snapshot_id = response_data.get("snapshot_id")
+
+            if not snapshot_id:
+                raise ValueError(f"No snapshot_id in 202 response: {response.text}")
+
+            for attempt in range(max_poll_attempts):
+                time.sleep(poll_interval)
+
+                snapshot_response = requests.get(
+                    f"{BRIGHTDATA_API_URL}/datasets/v3/snapshot/{snapshot_id}",
+                    params={"format": "json"},
+                    headers=self._get_headers(),
+                )
+
+                if snapshot_response.status_code == 200:
+                    return snapshot_response.json()
+
+                if snapshot_response.status_code == 202:
+                    status_data = snapshot_response.json()
+                    status = status_data.get("status", "")
+                    if status in ["running", "building", "starting"]:
+                        continue
+                    continue
+
+                raise ValueError(
+                    f"Unexpected status {snapshot_response.status_code} while polling: {snapshot_response.text}"
+                )
+
+            raise ValueError(f"Timeout after {max_poll_attempts * poll_interval} seconds waiting for data")
+
+        error_message = f"Error {response.status_code}: {response.text}"
+        raise ValueError(error_message)
     
     async def get_dataset_data_async(
         self,
         dataset_id: str,
-        url: str,
+        url: Optional[str] = None,
         zipcode: Optional[str] = None,
         additional_params: Optional[Dict[str, Any]] = None,
     ) -> Dict:
         """Get structured data from a Bright Data Dataset asynchronously.
-        
+
         Args:
             dataset_id: The ID of the Bright Data Dataset to query
-            url: URL to extract data from
+            url: URL to extract data from (required for most datasets)
             zipcode: Optional zipcode for location-specific data
             additional_params: Any additional parameters to include in the request
-            
+
         Returns:
             Dictionary containing the extracted structured data
         """
-        # Build request data
-        request_data = {"url": url}
-        
+        request_data = {}
+
+        if url:
+            request_data["url"] = url
+
         if zipcode:
             request_data["zipcode"] = zipcode
-            
+
         if additional_params:
-            request_data.update(additional_params)
-            
-        # Prepare the API request
+            filtered_params = {k: v for k, v in additional_params.items() if v is not None and v != ""}
+            request_data.update(filtered_params)
+
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 f"{BRIGHTDATA_API_URL}/datasets/v3/trigger",
@@ -255,5 +293,4 @@ class BrightDataWebScraperAPIWrapper(BrightDataAPIWrapper):
                 json=[request_data],
                 headers=self._get_headers()
             ) as response:
-            
                 return response
