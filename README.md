@@ -184,14 +184,122 @@ profile = scraper.invoke({
 | `dataset_type` | str | required | Type of data to extract |
 | `zipcode` | str | `None` | Zipcode for location-specific data |
 
-#### Supported Dataset Types
+#### Supported Dataset Types (44 Datasets)
 
-| Type | Description |
-|------|-------------|
-| `amazon_product` | Product details, pricing, specs |
-| `amazon_product_reviews` | Customer reviews and ratings |
-| `linkedin_person_profile` | Professional profile data |
-| `linkedin_company_profile` | Company information |
+<details>
+<summary><strong>E-Commerce (10 datasets)</strong></summary>
+
+| Type | Description | Required Inputs |
+|------|-------------|-----------------|
+| `amazon_product` | Product details, pricing, specs | `url` (with /dp/) |
+| `amazon_product_reviews` | Customer reviews and ratings | `url` (with /dp/) |
+| `amazon_product_search` | Search results from Amazon | `keyword`, `url` |
+| `walmart_product` | Walmart product data | `url` (with /ip/) |
+| `walmart_seller` | Walmart seller information | `url` |
+| `ebay_product` | eBay product data | `url` |
+| `homedepot_products` | Home Depot product data | `url` |
+| `zara_products` | Zara product data | `url` |
+| `etsy_products` | Etsy product data | `url` |
+| `bestbuy_products` | Best Buy product data | `url` |
+
+</details>
+
+<details>
+<summary><strong>LinkedIn (5 datasets)</strong></summary>
+
+| Type | Description | Required Inputs |
+|------|-------------|-----------------|
+| `linkedin_person_profile` | Professional profile data | `url` |
+| `linkedin_company_profile` | Company information | `url` |
+| `linkedin_job_listings` | Job listing details | `url` |
+| `linkedin_posts` | Post content and engagement | `url` |
+| `linkedin_people_search` | Search for people | `url`, `first_name`, `last_name` |
+
+</details>
+
+<details>
+<summary><strong>Business Intelligence (2 datasets)</strong></summary>
+
+| Type | Description | Required Inputs |
+|------|-------------|-----------------|
+| `crunchbase_company` | Company funding, investors, metrics | `url` |
+| `zoominfo_company_profile` | B2B company intelligence | `url` |
+
+</details>
+
+<details>
+<summary><strong>Instagram (4 datasets)</strong></summary>
+
+| Type | Description | Required Inputs |
+|------|-------------|-----------------|
+| `instagram_profiles` | Profile data and stats | `url` |
+| `instagram_posts` | Post content and engagement | `url` |
+| `instagram_reels` | Reel content and metrics | `url` |
+| `instagram_comments` | Comments on posts | `url` |
+
+</details>
+
+<details>
+<summary><strong>Facebook (4 datasets)</strong></summary>
+
+| Type | Description | Required Inputs |
+|------|-------------|-----------------|
+| `facebook_posts` | Post content and engagement | `url` |
+| `facebook_marketplace_listings` | Marketplace listing data | `url` |
+| `facebook_company_reviews` | Company reviews | `url`, `num_of_reviews` |
+| `facebook_events` | Event details | `url` |
+
+</details>
+
+<details>
+<summary><strong>TikTok (4 datasets)</strong></summary>
+
+| Type | Description | Required Inputs |
+|------|-------------|-----------------|
+| `tiktok_profiles` | Profile data and stats | `url` |
+| `tiktok_posts` | Video content and metrics | `url` |
+| `tiktok_shop` | Shop product data | `url` |
+| `tiktok_comments` | Comments on videos | `url` |
+
+</details>
+
+<details>
+<summary><strong>YouTube (3 datasets)</strong></summary>
+
+| Type | Description | Required Inputs |
+|------|-------------|-----------------|
+| `youtube_profiles` | Channel profile data | `url` |
+| `youtube_videos` | Video content and metrics | `url` |
+| `youtube_comments` | Comments on videos | `url`, `num_of_comments` (default: 10) |
+
+</details>
+
+<details>
+<summary><strong>Google (3 datasets)</strong></summary>
+
+| Type | Description | Required Inputs |
+|------|-------------|-----------------|
+| `google_maps_reviews` | Business reviews from Maps | `url`, `days_limit` (default: 3) |
+| `google_shopping` | Shopping product data | `url` |
+| `google_play_store` | App store data | `url` |
+
+</details>
+
+<details>
+<summary><strong>Other Platforms (9 datasets)</strong></summary>
+
+| Type | Description | Required Inputs |
+|------|-------------|-----------------|
+| `apple_app_store` | iOS app data | `url` |
+| `x_posts` | X (Twitter) post data | `url` |
+| `reddit_posts` | Reddit post data | `url` |
+| `github_repository_file` | GitHub file content | `url` |
+| `yahoo_finance_business` | Financial business data | `url` |
+| `reuter_news` | News article data | `url` |
+| `zillow_properties_listing` | Real estate listing data | `url` |
+| `booking_hotel_listings` | Hotel listing data | `url` |
+
+</details>
 
 ---
 
