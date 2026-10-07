@@ -1,8 +1,14 @@
 # Releasing langchain-brightdata
 
-Pushing a `v*` tag on a commit that is on `main` runs `.github/workflows/publish.yml`: the tests (`.github/workflows/ci.yml`), the release guard (`scripts/release_guard.py --tag`) and the build. Only when all three pass does the upload job start, and it waits until the maintainer approves the `pypi` environment. PyPI takes the upload through trusted publishing, so no token is stored anywhere.
+Pushing a `v*` tag on a commit that is on `main` runs `.github/workflows/publish.yml`: the tests (`.github/workflows/ci.yml`), the release guard (`scripts/release_guard.py --tag`) and the build. Only when all three pass does the upload job start, and it waits until the maintainer approves the `pypi` environment. PyPI takes the upload through trusted publishing, so no token is stored anywhere. Release runs go one at a time, and runs waiting behind one are all kept, not cancelled (`queue: max`).
 
-Before the very first release, create the `pypi` environment in the repository settings (Settings, Environments) with the maintainer as a required reviewer. If it does not exist, GitHub creates it on the first run with no protection, and the upload waits for no one. Set it up by hand and do not rely on the guard for it: a guard check can stop a release, but it cannot create the environment or add the reviewer.
+Before the very first release, create the `pypi` environment in the repository settings (Settings, Environments) with:
+
+- Required reviewers: the maintainer.
+- "Allow administrators to bypass configured protection rules": off.
+- Deployment branches and tags: "Selected branches and tags", with one tag rule `v*`.
+
+Without it, GitHub would create the environment on first use with no protection. The guard reads the environment on every release and refuses when it is missing, has no required reviewer, lets administrators bypass, or lets any branch or tag deploy (rows 25 to 29). It cannot set these for you, and it does not check who the reviewer is or the `v*` rule.
 
 ## Optional: let specific testers try a branch first
 
@@ -38,7 +44,8 @@ The guard refuses:
 - a tag that does not match the committed `[project].version`,
 - a version already on PyPI, yanked or not,
 - a tagged commit that is not on `main`,
-- a run that is not `publish.yml` started by that tag.
+- a run that is not `publish.yml` started by that tag,
+- a `pypi` environment that is missing or unprotected.
 
 ## What the guard messages mean
 
@@ -52,7 +59,7 @@ The guard prints one line per failure. Its `--pr` checks (rows 1 to 12) also run
 | 4 | `.github/workflows/publish.yml not found; the release workflow must have exactly that name` | Restore the file under that name. PyPI trusts only that file. |
 | 5 | `publish.yml has no step that uses pypa/gh-action-pypi-publish@<ref>; upload to PyPI from a step in publish.yml` | Put the upload step back in `publish.yml`, pinned by commit SHA. |
 | 6 | `publish.yml mentions skip-existing (line {number}); remove it, a duplicate upload must fail` | Delete that line, even if it is a comment. |
-| 7 | `{path} mentions gh-action-pypi-publish; only publish.yml may upload to PyPI` | Remove the mention from that file. |
+| 7 | `{path} mentions gh-action-pypi-publish; only publish.yml may upload to PyPI` | Remove the mention from that file. `.github/dependabot.yml` is exempt. |
 | 8 | `pyproject name is {name}, expected langchain-brightdata; set [project].name to langchain-brightdata` | Set the name back. |
 | 9 | `pyproject has no [project].version string; set a static one like version = "0.2.1"` | Write the version as a plain string. |
 | 10 | `pyproject version {version} is not a valid PEP 440 version; use one like 0.2.1` | Fix the version. |
@@ -64,12 +71,17 @@ The guard prints one line per failure. Its `--pr` checks (rows 1 to 12) also run
 | 16 | `PyPI returned bad JSON for langchain-brightdata; try again later` | Re-run all jobs later. |
 | 17 | `{version} is already on PyPI; bump [project].version and tag the new version` | PyPI never takes a version twice. Bump it on a PR and tag that. |
 | 18 | `{X.Y.Z} is already on PyPI, so pip never installs an rc of it by default; set [project].version to the next version's rc (for example {X}.{Y}.{Z+1}rc1) and tag that` | Release an rc of the next version. |
-| 19 | `{version} has no release candidate on PyPI; set [project].version to {version}rc1, tag v{version}rc1, test it with pip install --pre, then release {version}` | Release `X.Y.Zrc1` first (steps 1 to 4). A yanked rc does not count. |
+| 19 | `{version} has no release candidate on PyPI; set [project].version to {X.Y.ZrcN}, tag v{X.Y.ZrcN}, test it with pip install --pre, then release {version}` | Release the rc it names first (steps 1 to 4). A yanked rc does not count, so it names the rc after the highest one on PyPI. |
 | 20 | `GITHUB_WORKFLOW_REF is not set; run --tag only inside the publish workflow on GitHub Actions` | Locally, use `--pr`. |
 | 21 | `workflow ref {ref} is not {expected}; release only from publish.yml, started by pushing tag {tag}` | Release only by pushing a tag to this repository. |
 | 22 | `origin/main is not available; check out with fetch-depth: 0 so the guard can see main` | Restore `fetch-depth: 0` in the guard job's checkout. |
 | 23 | `HEAD is not on main; tag a commit that is already on main` | Merge first, then tag the commit on `main`. |
 | 24 | `could not check whether HEAD is on main (git exit {code}: {output}); check that the checkout is a full git clone` | Check the guard job's checkout step, then re-run all jobs. |
+| 25 | `the pypi environment is missing or unprotected (not found); in repository settings create it with a required reviewer, admins unable to bypass, and deployments limited to v* tags` | Create it with the settings at the top. If it exists, check that the guard job still has `actions: read` and `GITHUB_TOKEN`. |
+| 26 | `could not read the pypi environment from GitHub (HTTP {status}); try again later` | Re-run all jobs later. |
+| 27 | `could not read the pypi environment from GitHub ({error}); try again when GitHub is reachable` | Re-run all jobs later. |
+| 28 | `GitHub returned bad JSON for the pypi environment; try again later` | Re-run all jobs later. |
+| 29 | `the pypi environment is missing or unprotected ({gaps}); in repository settings create it with a required reviewer, admins unable to bypass, and deployments limited to v* tags` | Fix each gap it lists (no required reviewer, admins can bypass, any branch or tag can deploy) with the settings at the top. |
 
 ## Rollback
 
