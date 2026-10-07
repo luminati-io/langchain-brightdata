@@ -6,9 +6,12 @@
 Exit code 0 when every check passes. Exit code 1 otherwise, with one line per
 failure that says what is wrong and what to do.
 
-The workflow checks read the YAML line by line instead of parsing it, so the
-script needs nothing beyond the standard library, packaging and (below Python
-3.11) tomli. When a line is unclear they fail rather than pass.
+The workflow and action checks read the YAML line by line instead of parsing
+it, so the script needs nothing beyond the standard library, packaging and
+(below Python 3.11) tomli. Each check leans toward failing: the checks for
+something forbidden skip only full-line comments and decode YAML hex escapes,
+and the check for the upload step ignores anything after a #. Not caught: a
+name split over two lines of a double-quoted string.
 
 pyproject.toml is read from the working tree, so run the guard before any step
 that edits it. This script never ships: the hatch wheel and sdist settings in
@@ -20,6 +23,7 @@ import functools
 import http.client
 import json
 import os
+import posixpath
 import re
 import subprocess
 import sys
@@ -35,34 +39,39 @@ else:
     import tomli as tomllib
 
 PACKAGE_NAME = "langchain-brightdata"
-PYPI_URL = f"https://pypi.org/pypi/{PACKAGE_NAME}/json"
-WORKFLOWS_DIR = Path(".github") / "workflows"
+REPO_SLUG = f"luminati-io/{PACKAGE_NAME}"
+# The Simple API lists every version; the JSON API's "releases" key is deprecated.
+PYPI_SIMPLE_URL = f"https://pypi.org/simple/{PACKAGE_NAME}/"
+PYPI_SIMPLE_JSON = "application/vnd.pypi.simple.v1+json"
+WORKFLOWS_DIR = ".github/workflows"
+ACTIONS_DIR = ".github/actions"
+ACTION_FILES = ("action.yml", "action.yaml")
 PUBLISH_FILE = "publish.yml"
+PUBLISH_PATH = f"{WORKFLOWS_DIR}/{PUBLISH_FILE}"
 PUBLISH_ACTION = "pypa/gh-action-pypi-publish"
-WORKFLOW_REF_PREFIX = f"luminati-io/{PACKAGE_NAME}/.github/workflows/{PUBLISH_FILE}@"
+WORKFLOW_REF_PREFIX = f"{REPO_SLUG}/{PUBLISH_PATH}@refs/tags/"
 # The full ref name: a tag called "origin/main" would win over the short name.
 MAIN_REF = "refs/remotes/origin/main"
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 # [0-9] rather than \d: in Python, \d also matches non-ASCII digits.
-TAG_PATTERN = re.compile(r"v[0-9]+\.[0-9]+\.[0-9]+(?:rc[0-9]+)?")
+VERSION_PATTERN = r"[0-9]+\.[0-9]+\.[0-9]+(?:rc[0-9]+)?"
+_VERSION = re.compile(VERSION_PATTERN)
+_TAG = re.compile("v" + VERSION_PATTERN)
 
 # A YAML comment starts with # at the start of a line or after whitespace.
 _COMMENT = re.compile(r"(?:^|\s)#.*$")
+_HEX_ESCAPE = re.compile(r"\\x([0-9A-Fa-f]{2})|\\u([0-9A-Fa-f]{4})|\\U([0-9A-Fa-f]{8})")
 # Matched case-insensitively, as GitHub matches action names and input names.
 _ACTION_MENTION = re.compile(re.escape(PUBLISH_ACTION), re.IGNORECASE)
 _USES_ACTION = re.compile(
     r"""\buses\s*:\s*["']?""" + re.escape(PUBLISH_ACTION) + r"""@[^\s"']+""", re.IGNORECASE
 )
-_CALLS_WORKFLOW = re.compile(
-    r"""\buses\s*:\s*["']?(?:\./|luminati-io/"""
-    + re.escape(PACKAGE_NAME)
-    + r"""/)\.github/workflows/([^@\s"']+)""",
-    re.IGNORECASE,
-)
-# The action accepts skip-existing and the older skip_existing.
-_SKIP_EXISTING = re.compile(
-    r"""(skip[-_]existing)["']?\s*:\s*("[^"]*"|'[^']*'|[^\s,}]*)""", re.IGNORECASE
+_USES = re.compile(r"""\buses\s*:\s*["']?([^\s"',}]+)""", re.IGNORECASE)
+# The action reads skip-existing and the older skip_existing.
+_SKIP_EXISTING = re.compile(r"skip[-_]existing", re.IGNORECASE)
+_SKIP_EXISTING_OFF = re.compile(
+    r"""\s*skip[-_]existing\s*:\s*(?:false|"false"|'false')(?:\s+#.*)?\s*""", re.IGNORECASE
 )
 
 Fetch = Callable[[str], bytes]
@@ -73,8 +82,62 @@ def _one_line(value: object) -> str:
     return " ".join(str(value).split())
 
 
+def _read(path: Path) -> str:
+    # GitHub requires UTF-8; replacing bad bytes still lets every check run.
+    return path.read_text(encoding="utf-8", errors="replace")
+
+
 def _strip_comments(text: str) -> List[str]:
+    """Lines with comments cut off.
+
+    A # inside a quoted value is cut too, so use this only where cutting too
+    much makes a check fail, not pass.
+    """
     return [_COMMENT.sub("", line) for line in text.splitlines()]
+
+
+def _hex_char(match: "re.Match[str]") -> str:
+    code = int(match.group(1) or match.group(2) or match.group(3), 16)
+    return chr(code) if code <= 0x10FFFF else match.group(0)
+
+
+def _scan_lines(text: str) -> List[str]:
+    """Lines to search for something forbidden.
+
+    Full-line comments become empty (line numbers stay right), YAML hex escapes
+    such as the one for "-" are decoded, and nothing else is cut.
+    """
+    return [
+        "" if line.lstrip().startswith("#") else _HEX_ESCAPE.sub(_hex_char, line)
+        for line in text.splitlines()
+    ]
+
+
+def _local_target(value: str) -> Optional[str]:
+    """The repo-relative path a uses: value points at in this repository, or None."""
+    if value.startswith("./"):
+        path = value[2:]
+    elif value.lower().startswith((REPO_SLUG + "/", REPO_SLUG + "@")):
+        path = value[len(REPO_SLUG):].split("@", 1)[0]
+    else:
+        return None
+    # Normalise under a stand-in root so ".." cannot leave the repository.
+    return posixpath.normpath("/" + path).lstrip("/")
+
+
+def _call_targets(lines: Sequence[str]) -> List[str]:
+    """Repo-relative files that uses: lines may call: a workflow, or an action's action.yml."""
+    targets = []
+    for line in lines:
+        for value in _USES.findall(line):
+            path = _local_target(value)
+            if path is None:
+                continue
+            if path.lower().endswith((".yml", ".yaml")):
+                targets.append(path)
+            else:
+                targets.extend(f"{path}/{name}" if path else name for name in ACTION_FILES)
+    return targets
 
 
 def _parse_version(value: Any) -> Optional[Version]:
@@ -92,11 +155,31 @@ def read_workflows(root: Path) -> Dict[str, str]:
     if not directory.is_dir():
         return {}
     return {
-        # GitHub requires UTF-8; replacing bad bytes still lets every check run.
-        path.name: path.read_text(encoding="utf-8", errors="replace")
+        path.name: _read(path)
         for path in sorted(directory.iterdir())
         if path.is_file() and path.suffix.lower() in (".yml", ".yaml")
     }
+
+
+def read_upload_files(root: Path, workflows: Mapping[str, str]) -> Dict[str, str]:
+    """Return {repo-relative path: text} for the workflows and every local action.
+
+    Local actions are action.yml and action.yaml anywhere under .github/actions,
+    plus any other action that these files call with uses: ./path.
+    """
+    files = {f"{WORKFLOWS_DIR}/{name}": text for name, text in workflows.items()}
+    actions = root / ACTIONS_DIR
+    if actions.is_dir():
+        for path in sorted(actions.rglob("*")):
+            if path.is_file() and path.name.lower() in ACTION_FILES:
+                files[path.relative_to(root).as_posix()] = _read(path)
+    pending = list(files)
+    while pending:
+        for target in _call_targets(_scan_lines(files[pending.pop()])):
+            if target not in files and (root / target).is_file():
+                files[target] = _read(root / target)
+                pending.append(target)
+    return files
 
 
 def load_project(root: Path) -> Tuple[Optional[Dict[str, Any]], List[str]]:
@@ -119,8 +202,7 @@ def check_publish_workflow_exists(workflows: Mapping[str, str]) -> List[str]:
     """publish.yml must exist under exactly that name."""
     if PUBLISH_FILE in workflows:
         return []
-    return [f"{WORKFLOWS_DIR.as_posix()}/{PUBLISH_FILE} not found; "
-            "the release workflow must have exactly that name"]
+    return [f"{PUBLISH_PATH} not found; the release workflow must have exactly that name"]
 
 
 def check_publish_uses_action(publish_text: str) -> List[str]:
@@ -132,59 +214,58 @@ def check_publish_uses_action(publish_text: str) -> List[str]:
 
 
 def check_no_skip_existing(publish_text: str) -> List[str]:
-    """publish.yml must not set skip-existing to anything but false.
+    """publish.yml may mention skip-existing only in a plain skip-existing: false line.
 
-    The action treats every value other than "false" (any case) as on, so an
-    empty value or an expression fails too.
+    The action treats every value other than "false" (any case) as on. Any
+    other line outside a full-line comment that names skip-existing or
+    skip_existing, in any case, fails: an expression, an empty value, an
+    explicit ? key, a hex-escaped name or a flow mapping.
     """
     failures = []
-    for number, line in enumerate(_strip_comments(publish_text), start=1):
-        for match in _SKIP_EXISTING.finditer(line):
-            key, value = match.groups()
-            if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
-                value = value[1:-1]
-            if value.lower() != "false":
-                failures.append(
-                    f"{PUBLISH_FILE} line {number} sets {key}; "
-                    "remove it so uploading a version that is already on PyPI fails"
-                )
+    raw_lines = publish_text.splitlines()
+    for number, (raw, line) in enumerate(zip(raw_lines, _scan_lines(publish_text)), start=1):
+        match = _SKIP_EXISTING.search(line)
+        if match and not _SKIP_EXISTING_OFF.fullmatch(raw):
+            failures.append(
+                f"{PUBLISH_FILE} line {number} sets {match.group(0)}; "
+                "remove it so uploading a version that is already on PyPI fails"
+            )
     return failures
 
 
-def check_single_publisher(workflows: Mapping[str, str]) -> List[str]:
-    """No workflow but publish.yml may use the action, directly or through a reusable workflow.
+def check_single_publisher(files: Mapping[str, str]) -> List[str]:
+    """Only publish.yml may use the publish action, directly or through what it calls.
 
-    Only reusable workflows in this repository can be followed. The check fails
-    on any mention of the action outside a comment, not just on a step.
+    files maps the repo-relative paths of workflows and local actions to their
+    text (see read_upload_files). Any mention of the action outside a full-line
+    comment counts as a use. Reusable workflows and actions in other
+    repositories cannot be followed.
     """
-    lines = {name: _strip_comments(text) for name, text in workflows.items()}
+    lines = {path: _scan_lines(text) for path, text in files.items()}
     direct = {
-        name for name, text in lines.items() if any(_ACTION_MENTION.search(x) for x in text)
+        path for path, text in lines.items() if any(_ACTION_MENTION.search(x) for x in text)
     }
-    calls = {
-        name: {called for line in text for called in _CALLS_WORKFLOW.findall(line)}
-        for name, text in lines.items()
-    }
+    calls = {path: set(_call_targets(text)) & set(files) for path, text in lines.items()}
     uploaders = set(direct)
-    # A workflow that calls an uploading workflow uploads too; repeat until nothing is added.
+    # Whatever calls an uploader uploads too; repeat until nothing is added.
     added = True
     while added:
         added = False
-        for name, called in calls.items():
-            if name not in uploaders and called & uploaders:
-                uploaders.add(name)
+        for path, called in calls.items():
+            if path not in uploaders and called & uploaders:
+                uploaders.add(path)
                 added = True
 
     failures = []
-    for name in sorted(uploaders - {PUBLISH_FILE}):
-        if name in direct:
+    for path in sorted(uploaders - {PUBLISH_PATH}):
+        if path in direct:
             failures.append(
-                f"{name} also uses {PUBLISH_ACTION}; only {PUBLISH_FILE} may upload to PyPI"
+                f"{path} also uses {PUBLISH_ACTION}; only {PUBLISH_FILE} may upload to PyPI"
             )
             continue
-        for called in sorted(calls[name] & uploaders):
+        for called in sorted(calls[path] & uploaders):
             failures.append(
-                f"{name} calls {called}, which uploads to PyPI; "
+                f"{path} calls {called}, which uploads to PyPI; "
                 f"only {PUBLISH_FILE} may upload to PyPI"
             )
     return failures
@@ -201,7 +282,7 @@ def check_project_name(project: Mapping[str, Any]) -> List[str]:
 
 
 def check_project_version(project: Mapping[str, Any]) -> List[str]:
-    """[project].version must be a canonical PEP 440 version."""
+    """[project].version must be canonical PEP 440 and of a form a release tag can have."""
     version = project.get("version")
     if not isinstance(version, str):
         return ['pyproject has no [project].version string; '
@@ -214,12 +295,15 @@ def check_project_version(project: Mapping[str, Any]) -> List[str]:
     if canonical != version:
         return [f"pyproject version {version} is not canonical PEP 440; "
                 f"write it as {canonical}"]
+    if not _VERSION.fullmatch(version):
+        return [f"pyproject version {version} is not X.Y.Z or X.Y.ZrcN, so no release tag "
+                "can match it; use a version like 0.2.1"]
     return []
 
 
 def check_tag_format(tag: str) -> List[str]:
     """The tag must be vX.Y.Z or vX.Y.ZrcN."""
-    if TAG_PATTERN.fullmatch(tag):
+    if _TAG.fullmatch(tag):
         return []
     return [f"tag {tag} is not of the form vX.Y.Z or vX.Y.ZrcN; push a tag like v0.2.1"]
 
@@ -233,9 +317,10 @@ def check_tag_matches_version(tag: str, version: str) -> List[str]:
             f"set [project].version to {tag_version} or tag v{version}"]
 
 
-def fetch_url(url: str, timeout: float = 15.0) -> bytes:
-    """GET url and return the body. Raises on any network or HTTP error."""
-    with urllib.request.urlopen(url, timeout=timeout) as response:
+def fetch_simple_index(url: str, timeout: float = 15.0) -> bytes:
+    """GET url from the PyPI Simple API as JSON. Raises on any network or HTTP error."""
+    request = urllib.request.Request(url, headers={"Accept": PYPI_SIMPLE_JSON})
+    with urllib.request.urlopen(request, timeout=timeout) as response:
         return response.read()
 
 
@@ -246,33 +331,34 @@ def check_not_on_pypi(version: str, fetch: Fetch) -> List[str]:
     versions, as PyPI does (0.2 equals 0.2.0).
     """
     try:
-        body = fetch(PYPI_URL)
+        body = fetch(PYPI_SIMPLE_URL)
     except (OSError, http.client.HTTPException) as exc:
         return [f"could not reach PyPI to check {version} ({_one_line(exc)}); "
                 "try again when PyPI is reachable"]
     bad_json = [f"PyPI returned bad JSON for {PACKAGE_NAME}; try again later"]
     try:
-        releases = json.loads(body)["releases"]
+        versions = json.loads(body)["versions"]
     except (ValueError, KeyError, TypeError):
         return bad_json
-    if not isinstance(releases, dict):
+    if not isinstance(versions, list) or not all(isinstance(v, str) for v in versions):
         return bad_json
     wanted = Version(version)
-    if any(_parse_version(release) == wanted for release in releases):
+    if any(_parse_version(release) == wanted for release in versions):
         return [f"{version} is already on PyPI; bump [project].version and tag the new version"]
     return []
 
 
-def check_workflow_ref(env: Mapping[str, str]) -> List[str]:
-    """The run must come from publish.yml in the upstream repository."""
+def check_workflow_ref(env: Mapping[str, str], tag: str) -> List[str]:
+    """The run must be publish.yml in the upstream repository, started by this tag."""
     ref = env.get("GITHUB_WORKFLOW_REF", "")
     if not ref:
         return ["GITHUB_WORKFLOW_REF is not set; "
                 "run --tag only inside the publish workflow on GitHub Actions"]
-    if ref.startswith(WORKFLOW_REF_PREFIX):
+    expected = WORKFLOW_REF_PREFIX + tag
+    if ref == expected:
         return []
-    return [f"workflow ref {ref} is not {PUBLISH_FILE} in luminati-io/{PACKAGE_NAME}; "
-            f"release only from {WORKFLOWS_DIR.as_posix()}/{PUBLISH_FILE}"]
+    return [f"workflow ref {ref} is not {expected}; "
+            f"release only from {PUBLISH_FILE}, started by pushing tag {tag}"]
 
 
 def run_git(args: Sequence[str], cwd: Path) -> Tuple[int, str]:
@@ -303,7 +389,7 @@ def check_head_on_main(git: GitRunner) -> List[str]:
 
 
 def pr_checks(root: Path) -> List[str]:
-    """Offline checks of the workflows and pyproject.toml."""
+    """Offline checks of the workflows, local actions and pyproject.toml."""
     failures: List[str] = []
     workflows = read_workflows(root)
     failures += check_publish_workflow_exists(workflows)
@@ -311,7 +397,7 @@ def pr_checks(root: Path) -> List[str]:
     if publish_text is not None:
         failures += check_publish_uses_action(publish_text)
         failures += check_no_skip_existing(publish_text)
-    failures += check_single_publisher(workflows)
+    failures += check_single_publisher(read_upload_files(root, workflows))
     project, load_failures = load_project(root)
     failures += load_failures
     if project is not None:
@@ -333,7 +419,7 @@ def tag_checks(
         failures += check_tag_matches_version(tag, version)
     if _parse_version(version) is not None:
         failures += check_not_on_pypi(version, fetch)
-    failures += check_workflow_ref(env)
+    failures += check_workflow_ref(env, tag)
     failures += check_head_on_main(git)
     return failures
 
@@ -364,7 +450,7 @@ def main(
             args.root,
             args.tag,
             env=os.environ if env is None else env,
-            fetch=fetch_url if fetch is None else fetch,
+            fetch=fetch_simple_index if fetch is None else fetch,
             git=functools.partial(run_git, cwd=args.root) if git is None else git,
         )
 
