@@ -3,14 +3,12 @@
 from typing import Any, Dict, List, Literal, Optional, Type
 
 from langchain_core.callbacks import (
-    AsyncCallbackManagerForToolRun,
     CallbackManagerForToolRun,
 )
 from langchain_core.tools import BaseTool, ToolException
 from pydantic import BaseModel, Field
 
 from ._utilities import BrightDataWebScraperAPIWrapper
-
 
 DATASETS = [
     {
@@ -445,7 +443,7 @@ class BrightDataWebScraperAPI(BaseTool):
 
             for input_name in required_inputs:
                 if input_name == "url":
-                    continue  
+                    continue
 
                 value = provided_params.get(input_name)
                 if value is None:
@@ -473,7 +471,7 @@ class BrightDataWebScraperAPI(BaseTool):
             )
 
             if not results:
-                raise ToolException(f"No data found for the provided inputs.")
+                raise ToolException("No data found for the provided inputs.")
 
             return results
 

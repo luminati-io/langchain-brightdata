@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Literal, Optional, Type
+from typing import Any, Dict, Optional, Type
 
 from langchain_core.callbacks import (
     CallbackManagerForToolRun,
@@ -7,6 +7,7 @@ from langchain_core.tools import BaseTool, ToolException
 from pydantic import BaseModel, Field
 
 from ._utilities import BrightDataSERPAPIWrapper
+
 
 class BrightDataSERPInput(BaseModel):
     """Input for BrightData's SERP API."""

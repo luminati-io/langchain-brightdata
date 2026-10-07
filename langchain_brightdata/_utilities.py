@@ -1,12 +1,12 @@
 """Utility for Bright Data API interactions."""
-import json
 import time
-from typing import Any, Dict, List, Literal, Optional
+import urllib.parse
+from typing import Any, Dict, Literal, Optional
+
 import aiohttp
 import requests
 from langchain_core.utils import get_from_dict_or_env
 from pydantic import BaseModel, ConfigDict, SecretStr, model_validator
-import urllib.parse
 
 BRIGHTDATA_API_URL = "https://api.brightdata.com"
 
@@ -134,7 +134,7 @@ class BrightDataSERPAPIWrapper(BrightDataAPIWrapper):
             params.append(f"num={results_count}")
         
         if parse_results:
-            params.append(f"brd_json=1")
+            params.append("brd_json=1")
 
         if search_type:
             if search_type == "jobs":
