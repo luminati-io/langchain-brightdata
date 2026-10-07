@@ -764,9 +764,8 @@ def test_no_rc_advice_for_a_version_that_is_not_canonical(tmp_path: Path) -> Non
 # The repository itself
 
 
-def test_repo_fails_only_on_skip_existing(capsys: pytest.CaptureFixture) -> None:
-    # Expected today: publish.yml still sets skip-existing. Update this when it is removed.
-    assert guard.main(["--pr"]) == 1
+def test_repo_passes_pr_checks(capsys: pytest.CaptureFixture) -> None:
+    assert guard.main(["--pr"]) == 0
     captured = capsys.readouterr()
-    assert captured.out == ""
-    assert captured.err.splitlines() == [skip_existing_at(39)]
+    assert captured.err == ""
+    assert captured.out == "All --pr checks passed.\n"

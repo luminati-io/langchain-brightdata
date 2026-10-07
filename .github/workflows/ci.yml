@@ -74,11 +74,33 @@ jobs:
       - name: Run tests
         run: python -m pytest -q
 
+  guard:
+    name: guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+
+      # Keep in sync with the packaging pin in publish.yml.
+      - name: Install packaging
+        run: python -m pip install packaging==26.3
+
+      - name: Run the release guard
+        run: python scripts/release_guard.py --pr
+
   # The one check a branch rule requires. It fails unless every job above
   # succeeded, so a failed, cancelled or skipped job cannot pass as green.
   ci-ok:
     name: ci-ok
-    needs: [lint, test]
+    needs: [lint, test, guard]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -87,10 +109,13 @@ jobs:
         env:
           LINT_RESULT: ${{ needs.lint.result }}
           TEST_RESULT: ${{ needs.test.result }}
+          GUARD_RESULT: ${{ needs.guard.result }}
         run: |
           echo "lint: $LINT_RESULT"
           echo "test: $TEST_RESULT"
-          if [ "$LINT_RESULT" != "success" ] || [ "$TEST_RESULT" != "success" ]; then
+          echo "guard: $GUARD_RESULT"
+          if [ "$LINT_RESULT" != "success" ] || [ "$TEST_RESULT" != "success" ] ||
+            [ "$GUARD_RESULT" != "success" ]; then
             echo "Not every job succeeded."
             exit 1
           fi
