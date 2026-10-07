@@ -30,6 +30,8 @@ _spec.loader.exec_module(guard)
 PYPI_VERSIONS_2026_10_07 = [
     "0.1.1", "0.1.2", "0.1.3", "0.1.4", "0.1.5", "0.1.6", "0.1.7", "0.1.8", "0.1.9", "0.2.0",
 ]
+# PyPI once v0.2.1rc1 is out, so a final v0.2.1 may release: the default for --tag tests.
+PYPI_WITH_RC1 = [*PYPI_VERSIONS_2026_10_07, "0.2.1rc1"]
 
 PUBLISH_YML = """\
 name: Publish to PyPI
@@ -127,7 +129,7 @@ def tag_failures(
     root: Path,
     tag: str = "v0.2.1",
     env: Optional[Dict[str, str]] = None,
-    fetch: Callable[[str], bytes] = pypi(PYPI_VERSIONS_2026_10_07),
+    fetch: Callable[[str], bytes] = pypi(PYPI_WITH_RC1),
     git: Callable = GIT_ON_MAIN,
 ) -> List[str]:
     return guard.tag_checks(root, tag, env=GOOD_ENV if env is None else env, fetch=fetch, git=git)
@@ -147,7 +149,7 @@ def test_tag_all_pass(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
     code = guard.main(
         ["--tag", "v0.2.1", "--root", str(tmp_path)],
         env=GOOD_ENV,
-        fetch=pypi(PYPI_VERSIONS_2026_10_07),
+        fetch=pypi(PYPI_WITH_RC1),
         git=GIT_ON_MAIN,
     )
     assert code == 0
@@ -157,7 +159,8 @@ def test_tag_all_pass(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
 def test_tag_rc_all_pass(tmp_path: Path) -> None:
     make_repo(tmp_path, version="0.2.1rc1")
     env = {"GITHUB_WORKFLOW_REF": GOOD_REF.replace("v0.2.1", "v0.2.1rc1")}
-    assert tag_failures(tmp_path, tag="v0.2.1rc1", env=env) == []
+    fetch = pypi(PYPI_VERSIONS_2026_10_07)
+    assert tag_failures(tmp_path, tag="v0.2.1rc1", env=env, fetch=fetch) == []
 
 
 def test_default_fetch_asks_the_simple_api_for_json(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -452,6 +455,7 @@ def test_tag_does_not_match_pyproject(tmp_path: Path) -> None:
 def test_version_already_on_pypi(tmp_path: Path) -> None:
     make_repo(tmp_path, version="0.2.0")
     env = {"GITHUB_WORKFLOW_REF": GOOD_REF.replace("v0.2.1", "v0.2.0")}
+    # 0.2.0 has no rc on PyPI either, but a version that is out needs a bump, not an rc.
     assert tag_failures(tmp_path, tag="v0.2.0", env=env) == [
         "0.2.0 is already on PyPI; bump [project].version and tag the new version"
     ]
@@ -578,6 +582,66 @@ def test_head_on_main_with_real_git(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     git("checkout", "-q", "-b", "feature")
     git("commit", "-q", "--allow-empty", "-m", "not on main")
     assert guard.check_head_on_main(runner) == [NOT_ON_MAIN]
+
+
+# --tag rules: release candidate first
+
+
+def rc_failures(tmp_path: Path, version: str, listed: Sequence[str]) -> List[str]:
+    """--tag failures for releasing version when PyPI lists today's versions plus listed."""
+    make_repo(tmp_path, version=version)
+    env = {"GITHUB_WORKFLOW_REF": GOOD_REF.replace("v0.2.1", f"v{version}")}
+    fetch = pypi([*PYPI_VERSIONS_2026_10_07, *listed])
+    return tag_failures(tmp_path, tag=f"v{version}", env=env, fetch=fetch)
+
+
+def test_final_without_rc_on_pypi_fails(tmp_path: Path) -> None:
+    assert rc_failures(tmp_path, "0.2.1", []) == [
+        "0.2.1 has no release candidate on PyPI; tag v0.2.1rc1 first and test it"
+    ]
+
+
+def test_rc_of_another_version_does_not_count(tmp_path: Path) -> None:
+    assert rc_failures(tmp_path, "0.3.0", ["0.2.1rc1"]) == [
+        "0.3.0 has no release candidate on PyPI; tag v0.3.0rc1 first and test it"
+    ]
+
+
+# Not an rc of 0.2.1: a longer version that starts the same, an older rc, a beta, a dev build.
+@pytest.mark.parametrize("listed", ["0.2.10rc1", "0.2.0rc1", "0.2.1b1", "0.2.1.dev1"])
+def test_only_an_rc_of_the_same_version_counts(tmp_path: Path, listed: str) -> None:
+    assert rc_failures(tmp_path, "0.2.1", [listed]) == [
+        "0.2.1 has no release candidate on PyPI; tag v0.2.1rc1 first and test it"
+    ]
+
+
+# 0.2.1.0rc1 is 0.2.1rc1 under PEP 440, which is how PyPI compares versions.
+@pytest.mark.parametrize("listed", ["0.2.1rc1", "0.2.1rc4", "0.2.1.0rc1"])
+def test_final_with_its_rc_on_pypi_passes(tmp_path: Path, listed: str) -> None:
+    assert rc_failures(tmp_path, "0.2.1", [listed]) == []
+
+
+@pytest.mark.parametrize("listed", [[], ["0.2.1rc1"]])
+def test_rc_passes_with_or_without_an_earlier_rc(tmp_path: Path, listed: List[str]) -> None:
+    assert rc_failures(tmp_path, "0.2.1rc2", listed) == []
+
+
+@pytest.mark.parametrize(
+    "version, listed", [("0.2.1rc1", ["0.2.1"]), ("0.2.1rc2", ["0.2.1rc1", "0.2.1"])]
+)
+def test_rc_after_its_final_fails(tmp_path: Path, version: str, listed: List[str]) -> None:
+    assert rc_failures(tmp_path, version, listed) == [
+        "0.2.1 is already released; an rc for it is too late"
+    ]
+
+
+@pytest.mark.parametrize("version", ["0.2.1.dev1", "0.2.1.post1", "1.0"])
+def test_no_rc_advice_for_a_version_no_tag_can_match(tmp_path: Path, version: str) -> None:
+    assert rc_failures(tmp_path, version, []) == [
+        f"pyproject version {version} is not X.Y.Z or X.Y.ZrcN, so no release tag can match it; "
+        "use a version like 0.2.1",
+        f"tag v{version} is not of the form vX.Y.Z or vX.Y.ZrcN; push a tag like v0.2.1",
+    ]
 
 
 # The repository itself

@@ -6,6 +6,10 @@
 Exit code 0 when every check passes. Exit code 1 otherwise, with one line per
 failure that says what is wrong and what to do.
 
+Release candidate first: tag vX.Y.Zrc1, install it with pip install --pre (or
+==X.Y.Zrc1) and test it, then tag vX.Y.Z. --tag fails a final whose rc is not
+on PyPI, and an rc whose final already is.
+
 The workflow and action checks read the YAML line by line instead of parsing
 it, so the script needs nothing beyond the standard library, packaging and
 (below Python 3.11) tomli. Each check leans toward failing: the checks for
@@ -324,28 +328,58 @@ def fetch_simple_index(url: str, timeout: float = 15.0) -> bytes:
         return response.read()
 
 
-def check_not_on_pypi(version: str, fetch: Fetch) -> List[str]:
-    """The version (a valid PEP 440 string) must not be on PyPI yet.
+def load_pypi_versions(version: str, fetch: Fetch) -> Tuple[Optional[List[Version]], List[str]]:
+    """Return every valid PEP 440 version PyPI lists, or None and the failure.
 
-    Fails closed when PyPI cannot be read. Versions are compared as PEP 440
-    versions, as PyPI does (0.2 equals 0.2.0).
+    Fails closed when PyPI cannot be read. version is the one being released,
+    named in the failure.
     """
     try:
         body = fetch(PYPI_SIMPLE_URL)
     except (OSError, http.client.HTTPException) as exc:
-        return [f"could not reach PyPI to check {version} ({_one_line(exc)}); "
-                "try again when PyPI is reachable"]
+        return None, [f"could not reach PyPI to check {version} ({_one_line(exc)}); "
+                      "try again when PyPI is reachable"]
     bad_json = [f"PyPI returned bad JSON for {PACKAGE_NAME}; try again later"]
     try:
         versions = json.loads(body)["versions"]
     except (ValueError, KeyError, TypeError):
-        return bad_json
+        return None, bad_json
     if not isinstance(versions, list) or not all(isinstance(v, str) for v in versions):
-        return bad_json
-    wanted = Version(version)
-    if any(_parse_version(release) == wanted for release in versions):
+        return None, bad_json
+    parsed = [_parse_version(release) for release in versions]
+    return [release for release in parsed if release is not None], []
+
+
+def check_not_on_pypi(version: str, released: Sequence[Version]) -> List[str]:
+    """The version (a valid PEP 440 string) must not be on PyPI yet.
+
+    released is what load_pypi_versions returns. Versions are compared as
+    PEP 440 versions, as PyPI does (0.2 equals 0.2.0).
+    """
+    if Version(version) in released:
         return [f"{version} is already on PyPI; bump [project].version and tag the new version"]
     return []
+
+
+def check_release_candidate_first(version: str, released: Sequence[Version]) -> List[str]:
+    """A final X.Y.Z needs an X.Y.ZrcN on PyPI, and an rc is too late once X.Y.Z is out.
+
+    pip installs a pre-release only when asked (--pre or ==X.Y.ZrcN), so an rc
+    on PyPI lets a real install be tested before users get the final, and an
+    rc uploaded after its final is never installed by default. version is
+    X.Y.Z or X.Y.ZrcN. Versions are compared as PEP 440 versions, by release
+    and pre-release parts. There is no override, on purpose.
+    """
+    wanted = Version(version)
+    final = Version(wanted.base_version)
+    if wanted.pre is not None:
+        if final in released:
+            return [f"{wanted.base_version} is already released; an rc for it is too late"]
+        return []
+    if any(r.pre is not None and r.pre[0] == "rc" and Version(r.base_version) == final
+           for r in released):
+        return []
+    return [f"{version} has no release candidate on PyPI; tag v{version}rc1 first and test it"]
 
 
 def check_workflow_ref(env: Mapping[str, str], tag: str) -> List[str]:
@@ -418,7 +452,15 @@ def tag_checks(
     if isinstance(version, str) and not tag_failures:
         failures += check_tag_matches_version(tag, version)
     if _parse_version(version) is not None:
-        failures += check_not_on_pypi(version, fetch)
+        released, pypi_failures = load_pypi_versions(version, fetch)
+        failures += pypi_failures
+        if released is not None:
+            on_pypi = check_not_on_pypi(version, released)
+            failures += on_pypi
+            # A version already out needs a bump first; check_project_version
+            # reports a version that is not X.Y.Z or X.Y.ZrcN.
+            if not on_pypi and _VERSION.fullmatch(version):
+                failures += check_release_candidate_first(version, released)
     failures += check_workflow_ref(env, tag)
     failures += check_head_on_main(git)
     return failures
