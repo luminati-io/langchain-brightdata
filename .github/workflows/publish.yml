@@ -11,11 +11,13 @@ permissions:
 concurrency:
   group: publish-pypi
   cancel-in-progress: false
+  # Keep every waiting run; the default keeps one and cancels older waiting runs.
+  queue: max
 
 jobs:
   tests:
     name: tests
-    uses: ./.github/workflows/ci.yml
+    uses: ./.github/workflows/ci.yml # zizmor: ignore[self-repository] ./ runs this commit; actionlint rejects $/
     permissions:
       contents: read
 
@@ -23,6 +25,9 @@ jobs:
     name: guard
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read # the guard reads the pypi environment (GitHub API: Actions read)
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -44,6 +49,7 @@ jobs:
       - name: Run the release guard
         env:
           TAG: ${{ github.ref_name }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: python scripts/release_guard.py --tag "$TAG"
 
   build:

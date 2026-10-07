@@ -10,6 +10,10 @@ Release candidate first: set [project].version to X.Y.Zrc1, tag vX.Y.Zrc1, test
 it with pip install --pre, then release X.Y.Z. --tag fails a final whose rc is
 not on PyPI, and an rc whose final already is.
 
+--tag also reads the pypi environment from the GitHub API (with GITHUB_TOKEN
+from the environment when set) and fails unless it has a required reviewer,
+admins cannot bypass it, and a deployment branch policy limits who deploys.
+
 The guard catches honest mistakes, not attacks: anyone who can change the
 workflows can change this script too, so review of .github/ and scripts/ is
 what stops a deliberate change.
@@ -35,6 +39,7 @@ import os
 import re
 import subprocess
 import sys
+import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, NamedTuple, Optional, Sequence, Tuple
@@ -61,6 +66,18 @@ PUBLISH_ACTION_NAME = "gh-action-pypi-publish"
 YAML_SUFFIXES = (".yml", ".yaml")
 # Build output folders at the top of the repository, never scanned.
 BUILD_DIRS = ("build", "dist")
+# Tool and environment folders, never scanned at any depth.
+TOOL_DIRS = (
+    ".git", "node_modules", ".tox", ".nox", ".venv", "venv", "site-packages", "__pycache__"
+)
+# Dependabot config may name the action, for example to ignore its updates; it cannot upload.
+DEPENDABOT_PATHS = (".github/dependabot.yml", ".github/dependabot.yaml")
+ENVIRONMENT_NAME = "pypi"
+GITHUB_ENVIRONMENT_URL = f"https://api.github.com/repos/{REPO_SLUG}/environments/{ENVIRONMENT_NAME}"
+ENVIRONMENT_FIX = (
+    "in repository settings create it with a required reviewer, admins unable to bypass, "
+    "and deployments limited to v* tags"
+)
 WORKFLOW_REF_PREFIX = f"{REPO_SLUG}/{PUBLISH_PATH}@refs/tags/"
 # The full ref name: a tag called "origin/main" would win over the short name.
 MAIN_REF = "refs/remotes/origin/main"
@@ -73,8 +90,8 @@ _TAG = re.compile("v" + VERSION_PATTERN)
 
 # A YAML comment starts with # at the start of a line or after whitespace.
 _COMMENT = re.compile(r"(?:^|\s)#.*$")
-# The YAML escapes that can spell a name: \xNN, \uNNNN, \UNNNNNNNN and \/.
-_ESCAPE = re.compile(r"\\x([0-9A-Fa-f]{2})|\\u([0-9A-Fa-f]{4})|\\U([0-9A-Fa-f]{8})|\\/")
+# The YAML escapes that can spell a name: \xNN, \uNNNN and \UNNNNNNNN.
+_ESCAPE = re.compile(r"\\x([0-9A-Fa-f]{2})|\\u([0-9A-Fa-f]{4})|\\U([0-9A-Fa-f]{8})")
 # Matched case-insensitively, as GitHub matches action names and input names.
 _ACTION_MENTION = re.compile(re.escape(PUBLISH_ACTION_NAME), re.IGNORECASE)
 _USES_ACTION = re.compile(
@@ -113,10 +130,7 @@ def _strip_comments(text: str) -> List[str]:
 
 
 def _unescape(match: "re.Match[str]") -> str:
-    digits = match.group(1) or match.group(2) or match.group(3)
-    if digits is None:
-        return "/"
-    code = int(digits, 16)
+    code = int(match.group(1) or match.group(2) or match.group(3), 16)
     return chr(code) if code <= 0x10FFFF else match.group(0)
 
 
@@ -164,8 +178,9 @@ def _is_rc_of(release: Version, final: Version) -> bool:
 def read_yaml_files(root: Path) -> Dict[str, str]:
     """Return {repo-relative path: text} for every .yml and .yaml file under root.
 
-    Skipped: .git folders, virtual environments (any folder with a pyvenv.cfg)
-    and the build output folders build/ and dist/ at the top.
+    Skipped: the TOOL_DIRS folders (.git, node_modules, virtual environments
+    and caches) at any depth, any folder with a pyvenv.cfg, and the build
+    output folders build/ and dist/ at the top.
     """
     files = {}
     for folder, dirs, names in os.walk(root):
@@ -173,7 +188,7 @@ def read_yaml_files(root: Path) -> Dict[str, str]:
         dirs[:] = sorted(
             name
             for name in dirs
-            if name != ".git"
+            if name not in TOOL_DIRS
             and not (here == root and name in BUILD_DIRS)
             and not (here / name / "pyvenv.cfg").is_file()
         )
@@ -231,16 +246,17 @@ def check_no_skip_existing(publish_text: str) -> List[str]:
 
 
 def check_single_publisher(files: Mapping[str, str]) -> List[str]:
-    """No YAML file but publish.yml may mention the PyPI publish action.
+    """No YAML file but publish.yml and the Dependabot config may mention the PyPI publish action.
 
     files maps repo-relative paths to text (see read_yaml_files). Any mention
     counts, in a comment or under any owner: a workflow or action that names
     the action may upload, and so may whatever calls it.
     """
+    exempt = (PUBLISH_PATH, *DEPENDABOT_PATHS)
     return [
         f"{path} mentions {PUBLISH_ACTION_NAME}; only {PUBLISH_FILE} may upload to PyPI"
         for path, text in sorted(files.items())
-        if path != PUBLISH_PATH and any(_ACTION_MENTION.search(x) for x in _plain_lines(text))
+        if path not in exempt and any(_ACTION_MENTION.search(x) for x in _plain_lines(text))
     ]
 
 
@@ -349,7 +365,9 @@ def check_release_candidate_first(
     default. Only an X.Y.ZrcN with a file that is not yanked counts, not a
     dev or post release of one. An rc of X.Y.Z after a newer final (a
     backport) is fine. version is canonical X.Y.Z or X.Y.ZrcN. Versions are
-    compared as PEP 440 versions. There is no override, on purpose.
+    compared as PEP 440 versions. There is no override, on purpose. The
+    advice names the next free rc: one above the highest rc of X.Y.Z on
+    PyPI, yanked or not, since PyPI never takes a version twice.
     """
     wanted = Version(version)
     final = Version(wanted.base_version)
@@ -362,8 +380,10 @@ def check_release_candidate_first(
         return []
     if any(_is_rc_of(release, final) for release in not_yanked):
         return []
+    taken = [release.pre[1] for release in listed if _is_rc_of(release, final)]
+    rc = f"{version}rc{max(taken, default=0) + 1}"
     return [f"{version} has no release candidate on PyPI; set [project].version to "
-            f"{version}rc1, tag v{version}rc1, test it with pip install --pre, "
+            f"{rc}, tag v{rc}, test it with pip install --pre, "
             f"then release {version}"]
 
 
@@ -378,6 +398,66 @@ def check_workflow_ref(env: Mapping[str, str], tag: str) -> List[str]:
         return []
     return [f"workflow ref {ref} is not {expected}; "
             f"release only from {PUBLISH_FILE}, started by pushing tag {tag}"]
+
+
+def fetch_github_json(url: str, token: Optional[str], timeout: float = 15.0) -> bytes:
+    """GET url from the GitHub REST API. Raises on any network or HTTP error.
+
+    token, when not empty, is sent as a bearer token; it is never printed.
+    """
+    headers = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    request = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        return response.read()
+
+
+def check_environment(fetch: Fetch) -> List[str]:
+    """The pypi environment must exist and be protected. Fails closed.
+
+    It needs a required_reviewers rule with at least one reviewer,
+    can_admins_bypass false, and a deployment branch policy (null means any
+    branch or tag may deploy). A 404 means it does not exist, or the token
+    cannot see it.
+    """
+    try:
+        body = fetch(GITHUB_ENVIRONMENT_URL)
+    except urllib.error.HTTPError as exc:  # before OSError: HTTPError is one
+        if exc.code == 404:
+            return [f"the {ENVIRONMENT_NAME} environment is missing or unprotected "
+                    f"(not found); {ENVIRONMENT_FIX}"]
+        return [f"could not read the {ENVIRONMENT_NAME} environment from GitHub "
+                f"(HTTP {exc.code}); try again later"]
+    except (OSError, http.client.HTTPException) as exc:
+        return [f"could not read the {ENVIRONMENT_NAME} environment from GitHub "
+                f"({_one_line(exc)}); try again when GitHub is reachable"]
+    try:
+        page = json.loads(body)
+    except ValueError:
+        page = None
+    if not isinstance(page, dict):
+        return [f"GitHub returned bad JSON for the {ENVIRONMENT_NAME} environment; "
+                "try again later"]
+    rules = page.get("protection_rules")
+    reviewed = isinstance(rules, list) and any(
+        isinstance(rule, dict)
+        and rule.get("type") == "required_reviewers"
+        and isinstance(rule.get("reviewers"), list)
+        and len(rule["reviewers"]) > 0
+        for rule in rules
+    )
+    gaps = []
+    if not reviewed:
+        gaps.append("no required reviewer")
+    if page.get("can_admins_bypass") is not False:
+        gaps.append("admins can bypass")
+    if not isinstance(page.get("deployment_branch_policy"), dict):
+        gaps.append("any branch or tag can deploy")
+    if not gaps:
+        return []
+    return [f"the {ENVIRONMENT_NAME} environment is missing or unprotected "
+            f"({', '.join(gaps)}); {ENVIRONMENT_FIX}"]
 
 
 def run_git(args: Sequence[str], cwd: Path) -> Tuple[int, str]:
@@ -426,9 +506,17 @@ def pr_checks(root: Path) -> List[str]:
 
 
 def tag_checks(
-    root: Path, tag: str, env: Mapping[str, str], fetch: Fetch, git: GitRunner
+    root: Path,
+    tag: str,
+    env: Mapping[str, str],
+    fetch: Fetch,
+    git: GitRunner,
+    fetch_environment: Fetch,
 ) -> List[str]:
-    """Every --pr check plus the checks for releasing tag."""
+    """Every --pr check plus the checks for releasing tag.
+
+    fetch reads PyPI and fetch_environment reads the GitHub API.
+    """
     failures = pr_checks(root)
     tag_failures = check_tag_format(tag)
     failures += tag_failures
@@ -449,6 +537,7 @@ def tag_checks(
                 failures += check_release_candidate_first(version, pypi.listed, pypi.not_yanked)
     failures += check_workflow_ref(env, tag)
     failures += check_head_on_main(git)
+    failures += check_environment(fetch_environment)
     return failures
 
 
@@ -457,6 +546,7 @@ def main(
     env: Optional[Mapping[str, str]] = None,
     fetch: Optional[Fetch] = None,
     git: Optional[GitRunner] = None,
+    fetch_environment: Optional[Fetch] = None,
 ) -> int:
     """Run the checks, print each failure on its own line, return the exit code."""
     parser = argparse.ArgumentParser(description="Check that a PyPI release is safe to upload.")
@@ -474,12 +564,16 @@ def main(
     if args.tag is None:
         failures = pr_checks(args.root)
     else:
+        env = os.environ if env is None else env
+        if fetch_environment is None:
+            fetch_environment = functools.partial(fetch_github_json, token=env.get("GITHUB_TOKEN"))
         failures = tag_checks(
             args.root,
             args.tag,
-            env=os.environ if env is None else env,
+            env=env,
             fetch=fetch_simple_index if fetch is None else fetch,
             git=functools.partial(run_git, cwd=args.root) if git is None else git,
+            fetch_environment=fetch_environment,
         )
 
     for failure in failures:

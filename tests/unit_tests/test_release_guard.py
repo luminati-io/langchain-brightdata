@@ -1,8 +1,9 @@
 """Tests for scripts/release_guard.py: one failing case per rule, plus all-pass cases.
 
-Offline: PyPI and git are fakes, except one test that runs git in tmp_path.
+Offline: PyPI, the GitHub API and git are fakes, except one test that runs git in tmp_path.
 """
 
+import email.message
 import functools
 import http.client
 import importlib.util
@@ -152,6 +153,69 @@ def fake_git(results: Dict[Tuple[str, ...], Tuple[int, str]]) -> Callable:
 
 GIT_ON_MAIN = fake_git({ORIGIN_MAIN: (0, "abc123"), IS_ANCESTOR: (0, "")})
 
+ENVIRONMENT_URL = "https://api.github.com/repos/luminati-io/langchain-brightdata/environments/pypi"
+ENVIRONMENT_FIX = (
+    "in repository settings create it with a required reviewer, admins unable to bypass, "
+    "and deployments limited to v* tags"
+)
+
+
+def unprotected(reasons: str) -> str:
+    return f"the pypi environment is missing or unprotected ({reasons}); {ENVIRONMENT_FIX}"
+
+
+def protected_environment() -> Dict[str, Any]:
+    """A GitHub "Get an environment" reply for a protected pypi environment.
+
+    Shaped like the real reply for pypa/pip's protected PyPI environment, read on 2026-10-07:
+    the REST docs leave can_admins_bypass out, but the API sends it.
+    """
+    return {
+        "id": 1,
+        "node_id": "EN_1",
+        "name": "pypi",
+        "url": ENVIRONMENT_URL,
+        "html_url": "https://github.com/luminati-io/langchain-brightdata/deployments/activity_log",
+        "created_at": "2026-10-07T00:00:00Z",
+        "updated_at": "2026-10-07T00:00:00Z",
+        "can_admins_bypass": False,
+        "protection_rules": [
+            {"id": 1, "node_id": "GA_1", "type": "branch_policy"},
+            {
+                "id": 2,
+                "node_id": "GA_2",
+                "type": "required_reviewers",
+                "prevent_self_review": False,
+                "reviewers": [{"type": "User", "reviewer": {"login": "maintainer", "id": 1}}],
+            },
+        ],
+        "deployment_branch_policy": {"protected_branches": False, "custom_branch_policies": True},
+    }
+
+
+def github(page: Any) -> Callable[[str], bytes]:
+    """A fake GitHub API that answers the pypi environment URL with page as JSON."""
+
+    def fetch(url: str) -> bytes:
+        assert url == ENVIRONMENT_URL
+        return json.dumps(page).encode()
+
+    return fetch
+
+
+def github_error(error: Exception) -> Callable[[str], bytes]:
+    def fetch(url: str) -> bytes:
+        raise error
+
+    return fetch
+
+
+def http_error(code: int, reason: str) -> urllib.error.HTTPError:
+    return urllib.error.HTTPError(ENVIRONMENT_URL, code, reason, email.message.Message(), None)
+
+
+PROTECTED = github(protected_environment())
+
 
 def tag_failures(
     root: Path,
@@ -159,8 +223,16 @@ def tag_failures(
     env: Optional[Dict[str, str]] = None,
     fetch: Callable[[str], bytes] = pypi(PYPI_WITH_RC1),
     git: Callable = GIT_ON_MAIN,
+    environment: Callable[[str], bytes] = PROTECTED,
 ) -> List[str]:
-    return guard.tag_checks(root, tag, env=GOOD_ENV if env is None else env, fetch=fetch, git=git)
+    return guard.tag_checks(
+        root,
+        tag,
+        env=GOOD_ENV if env is None else env,
+        fetch=fetch,
+        git=git,
+        fetch_environment=environment,
+    )
 
 
 # All pass
@@ -179,6 +251,7 @@ def test_tag_all_pass(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
         env=GOOD_ENV,
         fetch=pypi(PYPI_WITH_RC1),
         git=GIT_ON_MAIN,
+        fetch_environment=PROTECTED,
     )
     assert code == 0
     assert capsys.readouterr().out == "All checks passed for v0.2.1.\n"
@@ -347,6 +420,41 @@ def test_git_build_output_and_virtual_environments_are_skipped(tmp_path: Path) -
         },
     )
     assert guard.pr_checks(tmp_path) == []
+
+
+@pytest.mark.parametrize(
+    "folder", ["node_modules", ".tox", ".nox", ".venv", "venv", "site-packages", "__pycache__"]
+)
+def test_tool_folders_are_skipped_at_any_depth(tmp_path: Path, folder: str) -> None:
+    # No pyvenv.cfg: the folder name alone is enough.
+    make_repo(tmp_path, files={f"tools/{folder}/pkg/upload.yml": UPLOAD_STEP})
+    assert guard.pr_checks(tmp_path) == []
+
+
+DEPENDABOT = """\
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: pypa/gh-action-pypi-publish
+"""
+
+
+@pytest.mark.parametrize("path", [".github/dependabot.yml", ".github/dependabot.yaml"])
+def test_dependabot_config_may_name_the_action(tmp_path: Path, path: str) -> None:
+    make_repo(tmp_path, files={path: DEPENDABOT})
+    assert guard.pr_checks(tmp_path) == []
+
+
+@pytest.mark.parametrize(
+    "path", ["dependabot.yml", ".github/workflows/dependabot.yml", "tools/.github/dependabot.yml"]
+)
+def test_only_the_dependabot_config_is_exempt(tmp_path: Path, path: str) -> None:
+    make_repo(tmp_path, files={path: DEPENDABOT})
+    assert guard.pr_checks(tmp_path) == [f"{path} {MENTIONS_ACTION}"]
 
 
 # Any mention fails, false and comments too: YAML reads "false" with a next line "true"
@@ -626,6 +734,175 @@ def test_head_on_main_with_real_git(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     assert guard.check_head_on_main(runner) == [NOT_ON_MAIN]
 
 
+# --tag rules: the pypi environment
+
+
+def without(key: str) -> Dict[str, Any]:
+    page = protected_environment()
+    del page[key]
+    return page
+
+
+def with_changes(**changes: Any) -> Dict[str, Any]:
+    return {**protected_environment(), **changes}
+
+
+def reviewers_rule(**changes: Any) -> Dict[str, Any]:
+    rule = protected_environment()["protection_rules"][1]
+    return {**rule, **changes}
+
+
+BRANCH_RULE = {"id": 1, "node_id": "GA_1", "type": "branch_policy"}
+NO_REVIEWER = "no required reviewer"
+
+
+@pytest.mark.parametrize(
+    "page, reasons",
+    [
+        (with_changes(protection_rules=[BRANCH_RULE]), NO_REVIEWER),
+        (with_changes(protection_rules=[]), NO_REVIEWER),
+        (without("protection_rules"), NO_REVIEWER),
+        (with_changes(protection_rules=["required_reviewers"]), NO_REVIEWER),
+        (with_changes(protection_rules=[reviewers_rule(reviewers=[])]), NO_REVIEWER),
+        (with_changes(protection_rules=[reviewers_rule(reviewers=None)]), NO_REVIEWER),
+        (with_changes(protection_rules=[reviewers_rule(type="wait_timer")]), NO_REVIEWER),
+        (with_changes(can_admins_bypass=True), "admins can bypass"),
+        (without("can_admins_bypass"), "admins can bypass"),
+        (with_changes(deployment_branch_policy=None), "any branch or tag can deploy"),
+        (without("deployment_branch_policy"), "any branch or tag can deploy"),
+        (
+            with_changes(
+                protection_rules=[], can_admins_bypass=True, deployment_branch_policy=None
+            ),
+            "no required reviewer, admins can bypass, any branch or tag can deploy",
+        ),
+    ],
+)
+def test_environment_unprotected(tmp_path: Path, page: Dict[str, Any], reasons: str) -> None:
+    make_repo(tmp_path)
+    assert tag_failures(tmp_path, environment=github(page)) == [unprotected(reasons)]
+
+
+def test_environment_only_one_reviewer_rule_needs_reviewers(tmp_path: Path) -> None:
+    rules = [reviewers_rule(reviewers=[]), BRANCH_RULE, reviewers_rule()]
+    make_repo(tmp_path)
+    assert tag_failures(tmp_path, environment=github(with_changes(protection_rules=rules))) == []
+
+
+def test_environment_not_found(tmp_path: Path) -> None:
+    make_repo(tmp_path)
+    environment = github_error(http_error(404, "Not Found"))
+    assert tag_failures(tmp_path, environment=environment) == [unprotected("not found")]
+
+
+@pytest.mark.parametrize(
+    "code, reason", [(403, "rate limit exceeded"), (429, "Too Many Requests"), (502, "")]
+)
+def test_environment_http_error_fails_closed(tmp_path: Path, code: int, reason: str) -> None:
+    make_repo(tmp_path)
+    assert tag_failures(tmp_path, environment=github_error(http_error(code, reason))) == [
+        f"could not read the pypi environment from GitHub (HTTP {code}); try again later"
+    ]
+
+
+@pytest.mark.parametrize(
+    "error, shown",
+    [
+        (urllib.error.URLError("network is down"), "<urlopen error network is down>"),
+        (TimeoutError("timed out"), "timed out"),
+        (http.client.IncompleteRead(b"partial"), "IncompleteRead(7 bytes read)"),
+    ],
+)
+def test_environment_unreachable_fails_closed(
+    tmp_path: Path, error: Exception, shown: str
+) -> None:
+    make_repo(tmp_path)
+    assert tag_failures(tmp_path, environment=github_error(error)) == [
+        f"could not read the pypi environment from GitHub ({shown}); "
+        "try again when GitHub is reachable"
+    ]
+
+
+@pytest.mark.parametrize("body", [b"<html>busy</html>", b"\xff", b"[]", b"null", b'"pypi"'])
+def test_environment_bad_json_fails_closed(tmp_path: Path, body: bytes) -> None:
+    make_repo(tmp_path)
+    assert tag_failures(tmp_path, environment=lambda url: body) == [
+        "GitHub returned bad JSON for the pypi environment; try again later"
+    ]
+
+
+class FakeResponse:
+    def __init__(self, body: bytes) -> None:
+        self.body = body
+
+    def __enter__(self) -> "FakeResponse":
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        return None
+
+    def read(self) -> bytes:
+        return self.body
+
+
+@pytest.mark.parametrize("token, sent", [("t0ken", "Bearer t0ken"), ("", None), (None, None)])
+def test_github_fetch_headers(
+    monkeypatch: pytest.MonkeyPatch, token: Optional[str], sent: Optional[str]
+) -> None:
+    seen = {}
+
+    def urlopen(request: Any, timeout: float) -> FakeResponse:
+        seen.update(
+            url=request.full_url,
+            accept=request.get_header("Accept"),
+            version=request.get_header("X-github-api-version"),
+            authorization=request.get_header("Authorization"),
+            timeout=timeout,
+        )
+        return FakeResponse(b"{}")
+
+    monkeypatch.setattr(guard.urllib.request, "urlopen", urlopen)
+    assert guard.fetch_github_json(ENVIRONMENT_URL, token) == b"{}"
+    assert seen == {
+        "url": ENVIRONMENT_URL,
+        "accept": "application/vnd.github+json",
+        "version": "2022-11-28",
+        "authorization": sent,
+        "timeout": 15.0,
+    }
+
+
+@pytest.mark.parametrize(
+    "reply, code", [(json.dumps(protected_environment()).encode(), 0), (None, 1)]
+)
+def test_main_reads_the_environment_with_github_token(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+    reply: Optional[bytes],
+    code: int,
+) -> None:
+    secret = "ghs_secret_value_123"
+    seen = []
+
+    def urlopen(request: Any, timeout: float) -> FakeResponse:
+        seen.append((request.full_url, request.get_header("Authorization")))
+        if reply is None:
+            raise http_error(404, "Not Found")
+        return FakeResponse(reply)
+
+    monkeypatch.setattr(guard.urllib.request, "urlopen", urlopen)
+    make_repo(tmp_path)
+    env = {**GOOD_ENV, "GITHUB_TOKEN": secret}
+    args = ["--tag", "v0.2.1", "--root", str(tmp_path)]
+    assert guard.main(args, env=env, fetch=pypi(PYPI_WITH_RC1), git=GIT_ON_MAIN) == code
+    assert seen == [(ENVIRONMENT_URL, f"Bearer {secret}")]
+    captured = capsys.readouterr()
+    assert secret not in captured.out + captured.err
+    if code:
+        assert captured.err.splitlines() == [unprotected("not found")]
+
+
 # --tag rules: release candidate first
 
 
@@ -643,10 +920,10 @@ def rc_failures(
     return tag_failures(tmp_path, tag=f"v{version}", env=env, fetch=fetch)
 
 
-def no_rc(version: str) -> str:
+def no_rc(version: str, rc: int = 1) -> str:
     return (
-        f"{version} has no release candidate on PyPI; set [project].version to {version}rc1, "
-        f"tag v{version}rc1, test it with pip install --pre, then release {version}"
+        f"{version} has no release candidate on PyPI; set [project].version to {version}rc{rc}, "
+        f"tag v{version}rc{rc}, test it with pip install --pre, then release {version}"
     )
 
 
@@ -678,8 +955,27 @@ def test_only_an_rc_of_the_same_version_counts(tmp_path: Path, listed: str) -> N
 
 
 def test_yanked_rc_does_not_count(tmp_path: Path) -> None:
+    # PyPI never takes 0.2.1rc1 again, so the advice is the next free rc.
     yanked = wheel_and_sdist("0.2.1rc1")
-    assert rc_failures(tmp_path, "0.2.1", ["0.2.1rc1"], yanked=yanked) == [no_rc("0.2.1")]
+    assert rc_failures(tmp_path, "0.2.1", ["0.2.1rc1"], yanked=yanked) == [no_rc("0.2.1", 2)]
+
+
+# The next free rc is one above the highest rc of the same version, yanked or not.
+@pytest.mark.parametrize(
+    "listed, yanked, rc",
+    [
+        (["0.2.1rc1", "0.2.1rc2"], ["0.2.1rc1", "0.2.1rc2"], 3),
+        (["0.2.1rc3"], ["0.2.1rc3"], 4),
+        (["0.2.1rc2", "0.2.1rc12"], ["0.2.1rc2", "0.2.1rc12"], 13),
+        (["0.2.1rc1", "0.3.0rc5"], ["0.2.1rc1"], 2),
+        (["0.2.1rc1", "0.2.1rc2.dev1"], ["0.2.1rc1"], 2),
+    ],
+)
+def test_advice_names_the_next_free_rc(
+    tmp_path: Path, listed: List[str], yanked: List[str], rc: int
+) -> None:
+    yanked_files = [name for version in yanked for name in wheel_and_sdist(version)]
+    assert rc_failures(tmp_path, "0.2.1", listed, yanked=yanked_files) == [no_rc("0.2.1", rc)]
 
 
 @pytest.mark.parametrize("yanked", wheel_and_sdist("0.2.1rc1"))
@@ -702,7 +998,8 @@ def test_file_names_that_do_not_parse_are_skipped(tmp_path: Path) -> None:
         "langchain_brightdata-0.2.1rc1x.tar.gz",
         *wheel_and_sdist("0.2.0"),
     ]
-    assert rc_failures(tmp_path, "0.2.1", ["0.2.1rc1"], files=files) == [no_rc("0.2.1")]
+    # 0.2.1rc1 is listed, so it is taken even though none of its files counts.
+    assert rc_failures(tmp_path, "0.2.1", ["0.2.1rc1"], files=files) == [no_rc("0.2.1", 2)]
 
 
 # 0.2.1.0rc1 is 0.2.1rc1 under PEP 440, which is how PyPI compares versions.
