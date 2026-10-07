@@ -53,6 +53,9 @@ dev = [
     "pytest-socket==0.7.0; python_version < '3.10'",
     "langchain-tests==1.1.9; python_version >= '3.10'",
     "langchain-tests==0.3.22; python_version < '3.10'",
+    # For scripts/release_guard.py. tomllib is in the standard library from 3.11.
+    "packaging>=23.0",
+    "tomli>=1.0.0; python_version < '3.11'",
 ]
 
 [project.urls]
@@ -79,7 +82,7 @@ select = ["E", "F", "W", "I"]
 
 [tool.ruff.lint.per-file-ignores]
 # Long lines and whitespace-only blank lines in package code, many inside the LLM-facing
-# description strings; rewrapping those is not a lint job. tests/ get every rule.
+# description strings; rewrapping those is not a lint job. tests/ and scripts/ get every rule.
 "langchain_brightdata/*.py" = ["E501", "W293"]
 
 [tool.black]
