@@ -6,16 +6,21 @@
 Exit code 0 when every check passes. Exit code 1 otherwise, with one line per
 failure that says what is wrong and what to do.
 
-Release candidate first: tag vX.Y.Zrc1, install it with pip install --pre (or
-==X.Y.Zrc1) and test it, then tag vX.Y.Z. --tag fails a final whose rc is not
-on PyPI, and an rc whose final already is.
+Release candidate first: set [project].version to X.Y.Zrc1, tag vX.Y.Zrc1, test
+it with pip install --pre, then release X.Y.Z. --tag fails a final whose rc is
+not on PyPI, and an rc whose final already is.
 
-The workflow and action checks read the YAML line by line instead of parsing
-it, so the script needs nothing beyond the standard library, packaging and
-(below Python 3.11) tomli. Each check leans toward failing: the checks for
-something forbidden skip only full-line comments and decode YAML hex escapes,
-and the check for the upload step ignores anything after a #. Not caught: a
-name split over two lines of a double-quoted string.
+The guard catches honest mistakes, not attacks: anyone who can change the
+workflows can change this script too, so review of .github/ and scripts/ is
+what stops a deliberate change.
+
+The YAML checks search the text instead of parsing it, so the script needs
+nothing beyond the standard library, packaging and (below Python 3.11) tomli.
+The checks for something forbidden lean toward failing: comments count, and
+YAML escapes are decoded and quotes dropped before searching. The check for the
+upload step in publish.yml ignores anything after a #. Not caught: a name split
+over two lines of a double-quoted string, or an upload that never names the
+action, such as twine in a run step.
 
 pyproject.toml is read from the working tree, so run the guard before any step
 that edits it. This script never ships: the hatch wheel and sdist settings in
@@ -27,14 +32,14 @@ import functools
 import http.client
 import json
 import os
-import posixpath
 import re
 import subprocess
 import sys
 import urllib.request
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Mapping, NamedTuple, Optional, Sequence, Tuple
 
+from packaging.utils import parse_sdist_filename, parse_wheel_filename
 from packaging.version import InvalidVersion, Version
 
 if sys.version_info >= (3, 11):
@@ -44,15 +49,18 @@ else:
 
 PACKAGE_NAME = "langchain-brightdata"
 REPO_SLUG = f"luminati-io/{PACKAGE_NAME}"
-# The Simple API lists every version; the JSON API's "releases" key is deprecated.
+# The Simple API lists every version and file; the JSON API's "releases" key is deprecated.
 PYPI_SIMPLE_URL = f"https://pypi.org/simple/{PACKAGE_NAME}/"
 PYPI_SIMPLE_JSON = "application/vnd.pypi.simple.v1+json"
 WORKFLOWS_DIR = ".github/workflows"
-ACTIONS_DIR = ".github/actions"
-ACTION_FILES = ("action.yml", "action.yaml")
 PUBLISH_FILE = "publish.yml"
 PUBLISH_PATH = f"{WORKFLOWS_DIR}/{PUBLISH_FILE}"
 PUBLISH_ACTION = "pypa/gh-action-pypi-publish"
+# Searched for without the owner, so a fork or a copy of the action counts too.
+PUBLISH_ACTION_NAME = "gh-action-pypi-publish"
+YAML_SUFFIXES = (".yml", ".yaml")
+# Build output folders at the top of the repository, never scanned.
+BUILD_DIRS = ("build", "dist")
 WORKFLOW_REF_PREFIX = f"{REPO_SLUG}/{PUBLISH_PATH}@refs/tags/"
 # The full ref name: a tag called "origin/main" would win over the short name.
 MAIN_REF = "refs/remotes/origin/main"
@@ -65,21 +73,25 @@ _TAG = re.compile("v" + VERSION_PATTERN)
 
 # A YAML comment starts with # at the start of a line or after whitespace.
 _COMMENT = re.compile(r"(?:^|\s)#.*$")
-_HEX_ESCAPE = re.compile(r"\\x([0-9A-Fa-f]{2})|\\u([0-9A-Fa-f]{4})|\\U([0-9A-Fa-f]{8})")
+# The YAML escapes that can spell a name: \xNN, \uNNNN, \UNNNNNNNN and \/.
+_ESCAPE = re.compile(r"\\x([0-9A-Fa-f]{2})|\\u([0-9A-Fa-f]{4})|\\U([0-9A-Fa-f]{8})|\\/")
 # Matched case-insensitively, as GitHub matches action names and input names.
-_ACTION_MENTION = re.compile(re.escape(PUBLISH_ACTION), re.IGNORECASE)
+_ACTION_MENTION = re.compile(re.escape(PUBLISH_ACTION_NAME), re.IGNORECASE)
 _USES_ACTION = re.compile(
     r"""\buses\s*:\s*["']?""" + re.escape(PUBLISH_ACTION) + r"""@[^\s"']+""", re.IGNORECASE
 )
-_USES = re.compile(r"""\buses\s*:\s*["']?([^\s"',}]+)""", re.IGNORECASE)
 # The action reads skip-existing and the older skip_existing.
 _SKIP_EXISTING = re.compile(r"skip[-_]existing", re.IGNORECASE)
-_SKIP_EXISTING_OFF = re.compile(
-    r"""\s*skip[-_]existing\s*:\s*(?:false|"false"|'false')(?:\s+#.*)?\s*""", re.IGNORECASE
-)
 
 Fetch = Callable[[str], bytes]
 GitRunner = Callable[[Sequence[str]], Tuple[int, str]]
+
+
+class PyPIVersions(NamedTuple):
+    """What the PyPI Simple API lists for the package."""
+
+    listed: List[Version]  # every version, yanked or not
+    not_yanked: List[Version]  # versions with at least one file that is not yanked
 
 
 def _one_line(value: object) -> str:
@@ -100,48 +112,23 @@ def _strip_comments(text: str) -> List[str]:
     return [_COMMENT.sub("", line) for line in text.splitlines()]
 
 
-def _hex_char(match: "re.Match[str]") -> str:
-    code = int(match.group(1) or match.group(2) or match.group(3), 16)
+def _unescape(match: "re.Match[str]") -> str:
+    digits = match.group(1) or match.group(2) or match.group(3)
+    if digits is None:
+        return "/"
+    code = int(digits, 16)
     return chr(code) if code <= 0x10FFFF else match.group(0)
 
 
-def _scan_lines(text: str) -> List[str]:
-    """Lines to search for something forbidden.
+def _plain_lines(text: str) -> List[str]:
+    """Lines to search for something forbidden: YAML escapes decoded, quotes dropped.
 
-    Full-line comments become empty (line numbers stay right), YAML hex escapes
-    such as the one for "-" are decoded, and nothing else is cut.
+    Comments stay, so a mention in a comment counts. Line numbers stay right.
     """
     return [
-        "" if line.lstrip().startswith("#") else _HEX_ESCAPE.sub(_hex_char, line)
+        _ESCAPE.sub(_unescape, line).replace('"', "").replace("'", "")
         for line in text.splitlines()
     ]
-
-
-def _local_target(value: str) -> Optional[str]:
-    """The repo-relative path a uses: value points at in this repository, or None."""
-    if value.startswith("./"):
-        path = value[2:]
-    elif value.lower().startswith((REPO_SLUG + "/", REPO_SLUG + "@")):
-        path = value[len(REPO_SLUG):].split("@", 1)[0]
-    else:
-        return None
-    # Normalise under a stand-in root so ".." cannot leave the repository.
-    return posixpath.normpath("/" + path).lstrip("/")
-
-
-def _call_targets(lines: Sequence[str]) -> List[str]:
-    """Repo-relative files that uses: lines may call: a workflow, or an action's action.yml."""
-    targets = []
-    for line in lines:
-        for value in _USES.findall(line):
-            path = _local_target(value)
-            if path is None:
-                continue
-            if path.lower().endswith((".yml", ".yaml")):
-                targets.append(path)
-            else:
-                targets.extend(f"{path}/{name}" if path else name for name in ACTION_FILES)
-    return targets
 
 
 def _parse_version(value: Any) -> Optional[Version]:
@@ -153,36 +140,46 @@ def _parse_version(value: Any) -> Optional[Version]:
         return None
 
 
-def read_workflows(root: Path) -> Dict[str, str]:
-    """Return {file name: text} for every .yml and .yaml file in .github/workflows."""
-    directory = root / WORKFLOWS_DIR
-    if not directory.is_dir():
-        return {}
-    return {
-        path.name: _read(path)
-        for path in sorted(directory.iterdir())
-        if path.is_file() and path.suffix.lower() in (".yml", ".yaml")
-    }
+def _file_version(filename: str) -> Optional[Version]:
+    """The version in a wheel or sdist file name, or None when the name does not parse."""
+    try:
+        if filename.endswith(".whl"):
+            return parse_wheel_filename(filename)[1]
+        return parse_sdist_filename(filename)[1]
+    except ValueError:  # InvalidWheelFilename, InvalidSdistFilename and InvalidVersion
+        return None
 
 
-def read_upload_files(root: Path, workflows: Mapping[str, str]) -> Dict[str, str]:
-    """Return {repo-relative path: text} for the workflows and every local action.
+def _is_rc_of(release: Version, final: Version) -> bool:
+    """Whether release is an X.Y.ZrcN of final, not a dev or post release of one."""
+    return (
+        release.pre is not None
+        and release.pre[0] == "rc"
+        and release.dev is None
+        and release.post is None
+        and Version(release.base_version) == final
+    )
 
-    Local actions are action.yml and action.yaml anywhere under .github/actions,
-    plus any other action that these files call with uses: ./path.
+
+def read_yaml_files(root: Path) -> Dict[str, str]:
+    """Return {repo-relative path: text} for every .yml and .yaml file under root.
+
+    Skipped: .git folders, virtual environments (any folder with a pyvenv.cfg)
+    and the build output folders build/ and dist/ at the top.
     """
-    files = {f"{WORKFLOWS_DIR}/{name}": text for name, text in workflows.items()}
-    actions = root / ACTIONS_DIR
-    if actions.is_dir():
-        for path in sorted(actions.rglob("*")):
-            if path.is_file() and path.name.lower() in ACTION_FILES:
-                files[path.relative_to(root).as_posix()] = _read(path)
-    pending = list(files)
-    while pending:
-        for target in _call_targets(_scan_lines(files[pending.pop()])):
-            if target not in files and (root / target).is_file():
-                files[target] = _read(root / target)
-                pending.append(target)
+    files = {}
+    for folder, dirs, names in os.walk(root):
+        here = Path(folder)
+        dirs[:] = sorted(
+            name
+            for name in dirs
+            if name != ".git"
+            and not (here == root and name in BUILD_DIRS)
+            and not (here / name / "pyvenv.cfg").is_file()
+        )
+        for name in sorted(names):
+            if name.lower().endswith(YAML_SUFFIXES):
+                files[(here / name).relative_to(root).as_posix()] = _read(here / name)
     return files
 
 
@@ -202,9 +199,9 @@ def load_project(root: Path) -> Tuple[Optional[Dict[str, Any]], List[str]]:
     return project, []
 
 
-def check_publish_workflow_exists(workflows: Mapping[str, str]) -> List[str]:
+def check_publish_workflow_exists(files: Mapping[str, str]) -> List[str]:
     """publish.yml must exist under exactly that name."""
-    if PUBLISH_FILE in workflows:
+    if PUBLISH_PATH in files:
         return []
     return [f"{PUBLISH_PATH} not found; the release workflow must have exactly that name"]
 
@@ -218,61 +215,33 @@ def check_publish_uses_action(publish_text: str) -> List[str]:
 
 
 def check_no_skip_existing(publish_text: str) -> List[str]:
-    """publish.yml may mention skip-existing only in a plain skip-existing: false line.
+    """publish.yml may not mention skip-existing at all, not even as false or in a comment.
 
-    The action treats every value other than "false" (any case) as on. Any
-    other line outside a full-line comment that names skip-existing or
-    skip_existing, in any case, fails: an expression, an empty value, an
-    explicit ? key, a hex-escaped name or a flow mapping.
+    The action treats every value but "false" as on, and YAML can carry a
+    value on to the next line ("false" then "true" reads as "false true"), so
+    no mention is the only form that is sure to be off. skip_existing and any
+    case count too.
     """
-    failures = []
-    raw_lines = publish_text.splitlines()
-    for number, (raw, line) in enumerate(zip(raw_lines, _scan_lines(publish_text)), start=1):
-        match = _SKIP_EXISTING.search(line)
-        if match and not _SKIP_EXISTING_OFF.fullmatch(raw):
-            failures.append(
-                f"{PUBLISH_FILE} line {number} sets {match.group(0)}; "
-                "remove it so uploading a version that is already on PyPI fails"
-            )
-    return failures
+    return [
+        f"{PUBLISH_FILE} mentions skip-existing (line {number}); "
+        "remove it, a duplicate upload must fail"
+        for number, line in enumerate(_plain_lines(publish_text), start=1)
+        if _SKIP_EXISTING.search(line)
+    ]
 
 
 def check_single_publisher(files: Mapping[str, str]) -> List[str]:
-    """Only publish.yml may use the publish action, directly or through what it calls.
+    """No YAML file but publish.yml may mention the PyPI publish action.
 
-    files maps the repo-relative paths of workflows and local actions to their
-    text (see read_upload_files). Any mention of the action outside a full-line
-    comment counts as a use. Reusable workflows and actions in other
-    repositories cannot be followed.
+    files maps repo-relative paths to text (see read_yaml_files). Any mention
+    counts, in a comment or under any owner: a workflow or action that names
+    the action may upload, and so may whatever calls it.
     """
-    lines = {path: _scan_lines(text) for path, text in files.items()}
-    direct = {
-        path for path, text in lines.items() if any(_ACTION_MENTION.search(x) for x in text)
-    }
-    calls = {path: set(_call_targets(text)) & set(files) for path, text in lines.items()}
-    uploaders = set(direct)
-    # Whatever calls an uploader uploads too; repeat until nothing is added.
-    added = True
-    while added:
-        added = False
-        for path, called in calls.items():
-            if path not in uploaders and called & uploaders:
-                uploaders.add(path)
-                added = True
-
-    failures = []
-    for path in sorted(uploaders - {PUBLISH_PATH}):
-        if path in direct:
-            failures.append(
-                f"{path} also uses {PUBLISH_ACTION}; only {PUBLISH_FILE} may upload to PyPI"
-            )
-            continue
-        for called in sorted(calls[path] & uploaders):
-            failures.append(
-                f"{path} calls {called}, which uploads to PyPI; "
-                f"only {PUBLISH_FILE} may upload to PyPI"
-            )
-    return failures
+    return [
+        f"{path} mentions {PUBLISH_ACTION_NAME}; only {PUBLISH_FILE} may upload to PyPI"
+        for path, text in sorted(files.items())
+        if path != PUBLISH_PATH and any(_ACTION_MENTION.search(x) for x in _plain_lines(text))
+    ]
 
 
 def check_project_name(project: Mapping[str, Any]) -> List[str]:
@@ -328,11 +297,13 @@ def fetch_simple_index(url: str, timeout: float = 15.0) -> bytes:
         return response.read()
 
 
-def load_pypi_versions(version: str, fetch: Fetch) -> Tuple[Optional[List[Version]], List[str]]:
-    """Return every valid PEP 440 version PyPI lists, or None and the failure.
+def load_pypi_versions(version: str, fetch: Fetch) -> Tuple[Optional[PyPIVersions], List[str]]:
+    """Return what PyPI lists for the package, or None and the failure.
 
-    Fails closed when PyPI cannot be read. version is the one being released,
-    named in the failure.
+    Fails closed when PyPI cannot be read or does not send the expected JSON.
+    Versions and file names that do not parse are skipped. A file counts as
+    not yanked only when its "yanked" is false. version is the one being
+    released, named in the failure.
     """
     try:
         body = fetch(PYPI_SIMPLE_URL)
@@ -341,45 +312,59 @@ def load_pypi_versions(version: str, fetch: Fetch) -> Tuple[Optional[List[Versio
                       "try again when PyPI is reachable"]
     bad_json = [f"PyPI returned bad JSON for {PACKAGE_NAME}; try again later"]
     try:
-        versions = json.loads(body)["versions"]
+        page = json.loads(body)
+        versions, files = page["versions"], page["files"]
     except (ValueError, KeyError, TypeError):
         return None, bad_json
     if not isinstance(versions, list) or not all(isinstance(v, str) for v in versions):
         return None, bad_json
-    parsed = [_parse_version(release) for release in versions]
-    return [release for release in parsed if release is not None], []
+    if not isinstance(files, list) or not all(
+        isinstance(f, dict) and isinstance(f.get("filename"), str) for f in files
+    ):
+        return None, bad_json
+    listed = [v for v in map(_parse_version, versions) if v is not None]
+    live = [_file_version(f["filename"]) for f in files if f.get("yanked", False) is False]
+    return PyPIVersions(listed, [v for v in live if v is not None]), []
 
 
-def check_not_on_pypi(version: str, released: Sequence[Version]) -> List[str]:
-    """The version (a valid PEP 440 string) must not be on PyPI yet.
+def check_not_on_pypi(version: str, listed: Sequence[Version]) -> List[str]:
+    """The version (a valid PEP 440 string) must not be on PyPI yet, yanked or not.
 
-    released is what load_pypi_versions returns. Versions are compared as
-    PEP 440 versions, as PyPI does (0.2 equals 0.2.0).
+    listed is PyPIVersions.listed. Versions are compared as PEP 440 versions,
+    as PyPI does (0.2 equals 0.2.0).
     """
-    if Version(version) in released:
+    if Version(version) in listed:
         return [f"{version} is already on PyPI; bump [project].version and tag the new version"]
     return []
 
 
-def check_release_candidate_first(version: str, released: Sequence[Version]) -> List[str]:
-    """A final X.Y.Z needs an X.Y.ZrcN on PyPI, and an rc is too late once X.Y.Z is out.
+def check_release_candidate_first(
+    version: str, listed: Sequence[Version], not_yanked: Sequence[Version]
+) -> List[str]:
+    """A final X.Y.Z needs an rc on PyPI, and an rc is too late once its own final is out.
 
-    pip installs a pre-release only when asked (--pre or ==X.Y.ZrcN), so an rc
-    on PyPI lets a real install be tested before users get the final, and an
-    rc uploaded after its final is never installed by default. version is
-    X.Y.Z or X.Y.ZrcN. Versions are compared as PEP 440 versions, by release
-    and pre-release parts. There is no override, on purpose.
+    pip installs a pre-release only when asked (pip install --pre, or
+    ==X.Y.ZrcN), so an rc on PyPI lets a real install be tested before users
+    get the final, and an rc uploaded after its final is never installed by
+    default. Only an X.Y.ZrcN with a file that is not yanked counts, not a
+    dev or post release of one. An rc of X.Y.Z after a newer final (a
+    backport) is fine. version is canonical X.Y.Z or X.Y.ZrcN. Versions are
+    compared as PEP 440 versions. There is no override, on purpose.
     """
     wanted = Version(version)
     final = Version(wanted.base_version)
     if wanted.pre is not None:
-        if final in released:
-            return [f"{wanted.base_version} is already released; an rc for it is too late"]
+        if final in listed:
+            major, minor, micro = final.release
+            return [f"{final} is already on PyPI, so pip never installs an rc of it by default; "
+                    "set [project].version to the next version's rc "
+                    f"(for example {major}.{minor}.{micro + 1}rc1) and tag that"]
         return []
-    if any(r.pre is not None and r.pre[0] == "rc" and Version(r.base_version) == final
-           for r in released):
+    if any(_is_rc_of(release, final) for release in not_yanked):
         return []
-    return [f"{version} has no release candidate on PyPI; tag v{version}rc1 first and test it"]
+    return [f"{version} has no release candidate on PyPI; set [project].version to "
+            f"{version}rc1, tag v{version}rc1, test it with pip install --pre, "
+            f"then release {version}"]
 
 
 def check_workflow_ref(env: Mapping[str, str], tag: str) -> List[str]:
@@ -423,15 +408,15 @@ def check_head_on_main(git: GitRunner) -> List[str]:
 
 
 def pr_checks(root: Path) -> List[str]:
-    """Offline checks of the workflows, local actions and pyproject.toml."""
+    """Offline checks of the YAML files and pyproject.toml."""
     failures: List[str] = []
-    workflows = read_workflows(root)
-    failures += check_publish_workflow_exists(workflows)
-    publish_text = workflows.get(PUBLISH_FILE)
+    files = read_yaml_files(root)
+    failures += check_publish_workflow_exists(files)
+    publish_text = files.get(PUBLISH_PATH)
     if publish_text is not None:
         failures += check_publish_uses_action(publish_text)
         failures += check_no_skip_existing(publish_text)
-    failures += check_single_publisher(read_upload_files(root, workflows))
+    failures += check_single_publisher(files)
     project, load_failures = load_project(root)
     failures += load_failures
     if project is not None:
@@ -449,18 +434,19 @@ def tag_checks(
     failures += tag_failures
     project, _ = load_project(root)  # pr_checks already reported a load failure
     version = project.get("version") if project is not None else None
+    # check_project_version reports a version that is not canonical X.Y.Z or X.Y.ZrcN.
+    releasable = project is not None and not check_project_version(project)
     if isinstance(version, str) and not tag_failures:
         failures += check_tag_matches_version(tag, version)
     if _parse_version(version) is not None:
-        released, pypi_failures = load_pypi_versions(version, fetch)
+        pypi, pypi_failures = load_pypi_versions(version, fetch)
         failures += pypi_failures
-        if released is not None:
-            on_pypi = check_not_on_pypi(version, released)
+        if pypi is not None:
+            on_pypi = check_not_on_pypi(version, pypi.listed)
             failures += on_pypi
-            # A version already out needs a bump first; check_project_version
-            # reports a version that is not X.Y.Z or X.Y.ZrcN.
-            if not on_pypi and _VERSION.fullmatch(version):
-                failures += check_release_candidate_first(version, released)
+            # A version that is already out needs a bump first, not an rc.
+            if releasable and not on_pypi:
+                failures += check_release_candidate_first(version, pypi.listed, pypi.not_yanked)
     failures += check_workflow_ref(env, tag)
     failures += check_head_on_main(git)
     return failures

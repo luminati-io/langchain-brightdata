@@ -61,12 +61,19 @@ ORIGIN_MAIN = ("rev-parse", "--verify", "--quiet", "refs/remotes/origin/main^{co
 IS_ANCESTOR = ("merge-base", "--is-ancestor", "HEAD", "refs/remotes/origin/main")
 
 ONLY_PUBLISH = "only publish.yml may upload to PyPI"
-SKIP_EXISTING_FIX = "remove it so uploading a version that is already on PyPI fails"
+MENTIONS_ACTION = f"mentions gh-action-pypi-publish; {ONLY_PUBLISH}"
 ORIGIN_MAIN_MISSING = (
     "origin/main is not available; check out with fetch-depth: 0 so the guard can see main"
 )
 NOT_ON_MAIN = "HEAD is not on main; tag a commit that is already on main"
 BAD_JSON = "PyPI returned bad JSON for langchain-brightdata; try again later"
+
+
+def skip_existing_at(line: int) -> str:
+    return (
+        f"publish.yml mentions skip-existing (line {line}); "
+        "remove it, a duplicate upload must fail"
+    )
 
 
 def make_repo(
@@ -97,8 +104,21 @@ def make_repo(
     return root
 
 
-def pypi(versions: Sequence[str]) -> Callable[[str], bytes]:
-    """A fake PyPI Simple API JSON page that lists these versions."""
+def wheel_and_sdist(version: str) -> List[str]:
+    """The file names PyPI shows for one upload of version."""
+    stem = f"langchain_brightdata-{version}"
+    return [f"{stem}-py3-none-any.whl", f"{stem}.tar.gz"]
+
+
+def pypi(
+    versions: Sequence[str], yanked: Sequence[str] = (), files: Optional[Sequence[str]] = None
+) -> Callable[[str], bytes]:
+    """A fake PyPI Simple API JSON page that lists these versions, shaped like the real one.
+
+    files are the file names, by default a wheel and an sdist for each version.
+    The files named in yanked are yanked.
+    """
+    names = [n for v in versions for n in wheel_and_sdist(v)] if files is None else files
 
     def fetch(url: str) -> bytes:
         assert url == "https://pypi.org/simple/langchain-brightdata/"
@@ -106,7 +126,15 @@ def pypi(versions: Sequence[str]) -> Callable[[str], bytes]:
             "meta": {"api-version": "1.4"},
             "name": "langchain-brightdata",
             "versions": list(versions),
-            "files": [],
+            "files": [
+                {
+                    "filename": name,
+                    "url": f"https://files.pythonhosted.org/packages/{name}",
+                    "hashes": {"sha256": "0" * 64},
+                    "yanked": "broken build" if name in yanked else False,
+                }
+                for name in names
+            ],
         }
         return json.dumps(page).encode()
 
@@ -203,7 +231,7 @@ def test_publish_yml_needs_exact_name(tmp_path: Path) -> None:
     make_repo(tmp_path, publish=None, others={"Publish.yml": PUBLISH_YML})
     assert guard.pr_checks(tmp_path) == [
         ".github/workflows/publish.yml not found; the release workflow must have exactly that name",
-        f".github/workflows/Publish.yml also uses pypa/gh-action-pypi-publish; {ONLY_PUBLISH}",
+        f".github/workflows/Publish.yml {MENTIONS_ACTION}",
     ]
 
 
@@ -229,120 +257,131 @@ def test_publish_yml_without_action_step(tmp_path: Path, step: str) -> None:
     [
         "- uses: pypa/gh-action-pypi-publish@v1.12.4",
         "- uses: PyPA/GH-Action-PyPI-Publish@v1",
+        "- uses: someone/gh-action-pypi-publish@v1",
         '- {name: "a #b", uses: pypa/gh-action-pypi-publish@v1}',
+        "# - uses: pypa/gh-action-pypi-publish@release/v1",
+        '- uses: "pypa\\/gh-action-pypi-publish@release/v1"',
         '- uses: "pypa/gh-action-pypi\\x2dpublish@v1"',
+        '- uses: "pypa/gh-action-pypi\\u002Dpublish@v1"',
+        '- uses: "pypa/gh-action-pypi\\U0000002dpublish@v1"',
+        "- run: docker run \"ghcr.io/pypa/gh-action-\"'pypi-publish:release-v1'",
     ],
 )
-def test_other_workflow_uses_action(tmp_path: Path, step: str) -> None:
+def test_other_workflow_mentions_action(tmp_path: Path, step: str) -> None:
     make_repo(tmp_path, others={"release.yaml": f"jobs:\n  up:\n    steps:\n      {step}\n"})
-    assert guard.pr_checks(tmp_path) == [
-        f".github/workflows/release.yaml also uses pypa/gh-action-pypi-publish; {ONLY_PUBLISH}"
-    ]
+    assert guard.pr_checks(tmp_path) == [f".github/workflows/release.yaml {MENTIONS_ACTION}"]
 
 
-def test_other_workflow_uploads_through_reusable_workflow(tmp_path: Path) -> None:
-    upload = "jobs:\n  up:\n    steps:\n      - uses: pypa/gh-action-pypi-publish@v1\n"
+def test_reusable_workflow_that_uploads_fails(tmp_path: Path) -> None:
+    upload = (
+        "on: workflow_call\njobs:\n  up:\n    steps:\n"
+        "      - uses: pypa/gh-action-pypi-publish@v1\n"
+    )
     release = "jobs:\n  release:\n    uses: ./.github/workflows/upload.yml\n"
-    calls_publish = (
-        "jobs:\n  release:\n"
-        "    uses: luminati-io/langchain-brightdata/.github/workflows/publish.yml@main\n"
-    )
-    make_repo(
-        tmp_path,
-        others={"upload.yml": upload, "release.yml": release, "nightly.yml": calls_publish},
-    )
-    assert guard.pr_checks(tmp_path) == [
-        ".github/workflows/nightly.yml calls .github/workflows/publish.yml, "
-        f"which uploads to PyPI; {ONLY_PUBLISH}",
-        ".github/workflows/release.yml calls .github/workflows/upload.yml, "
-        f"which uploads to PyPI; {ONLY_PUBLISH}",
-        f".github/workflows/upload.yml also uses pypa/gh-action-pypi-publish; {ONLY_PUBLISH}",
-    ]
+    make_repo(tmp_path, others={"upload.yml": upload, "release.yml": release})
+    # The caller does not name the action; the file that does is the one to fix.
+    assert guard.pr_checks(tmp_path) == [f".github/workflows/upload.yml {MENTIONS_ACTION}"]
 
 
-def test_other_workflow_uploads_through_composite_action(tmp_path: Path) -> None:
-    release = "jobs:\n  up:\n    steps:\n      - uses: ./.github/actions/upload\n"
+# However a workflow calls an upload action, the action file itself fails.
+@pytest.mark.parametrize(
+    "action, step",
+    [
+        ("tools/up/action.yml", "- uses: ./tools/up"),
+        ("tools/up/action.yml", '- "uses": ./tools/up'),
+        ("tools/up/action.yml", "- uses: >-\n          ./tools/up"),
+        ("tools/up/action.yml", "- uses:\n          ./tools/up"),
+        ("tools/up/action.yml", "- uses: *up"),
+        ("tools/up/action.yml", '- uses: "./tools\\/up"'),
+        ("tools/my up/action.yaml", '- uses: "./tools/my up"'),
+        (".github/actions/a/b/action.yml", "- uses: ./.github/actions/a"),
+    ],
+)
+def test_upload_action_fails_however_it_is_called(tmp_path: Path, action: str, step: str) -> None:
+    release = f"env:\n  UP: &up ./tools/up\njobs:\n  up:\n    steps:\n      {step}\n"
     make_repo(
         tmp_path,
         others={"release.yml": release},
-        files={".github/actions/upload/action.yml": UPLOAD_STEP},
+        files={
+            action: UPLOAD_STEP,
+            ".github/actions/a/action.yml": "runs:\n  steps:\n    - uses: ./.github/actions/a/b\n",
+        },
     )
-    assert guard.pr_checks(tmp_path) == [
-        f".github/actions/upload/action.yml also uses pypa/gh-action-pypi-publish; {ONLY_PUBLISH}",
-        ".github/workflows/release.yml calls .github/actions/upload/action.yml, "
-        f"which uploads to PyPI; {ONLY_PUBLISH}",
-    ]
+    assert guard.pr_checks(tmp_path) == [f"{action} {MENTIONS_ACTION}"]
 
 
 def test_uncalled_action_that_uploads_fails(tmp_path: Path) -> None:
     make_repo(tmp_path, files={".github/actions/release/upload/action.yaml": UPLOAD_STEP})
     assert guard.pr_checks(tmp_path) == [
-        ".github/actions/release/upload/action.yaml also uses pypa/gh-action-pypi-publish; "
-        f"{ONLY_PUBLISH}"
+        f".github/actions/release/upload/action.yaml {MENTIONS_ACTION}"
     ]
 
 
-def test_actions_outside_github_actions_are_followed(tmp_path: Path) -> None:
-    release = "jobs:\n  up:\n    steps:\n      - uses: ./tools/outer/\n"
-    outer = "runs:\n  using: composite\n  steps:\n    - uses: ./tools/inner\n"
+def test_every_yaml_file_is_scanned(tmp_path: Path) -> None:
     make_repo(
         tmp_path,
-        others={"release.yml": release},
-        files={"tools/outer/action.yml": outer, "tools/inner/action.yaml": UPLOAD_STEP},
+        files={
+            "tools/build/action.yml": UPLOAD_STEP,  # build/ is skipped only at the top
+            "deploy/Release.YML": UPLOAD_STEP,
+            "docs/upload.md": UPLOAD_STEP,  # not YAML
+        },
     )
     assert guard.pr_checks(tmp_path) == [
-        ".github/workflows/release.yml calls tools/outer/action.yml, "
-        f"which uploads to PyPI; {ONLY_PUBLISH}",
-        f"tools/inner/action.yaml also uses pypa/gh-action-pypi-publish; {ONLY_PUBLISH}",
-        "tools/outer/action.yml calls tools/inner/action.yaml, "
-        f"which uploads to PyPI; {ONLY_PUBLISH}",
+        f"deploy/Release.YML {MENTIONS_ACTION}",
+        f"tools/build/action.yml {MENTIONS_ACTION}",
     ]
 
 
-def test_action_in_a_comment_is_not_a_use(tmp_path: Path) -> None:
-    ci = "jobs:\n  lint:\n    steps:\n      # - uses: pypa/gh-action-pypi-publish@release/v1\n"
-    make_repo(tmp_path, others={"ci.yml": ci})
+def test_git_build_output_and_virtual_environments_are_skipped(tmp_path: Path) -> None:
+    make_repo(
+        tmp_path,
+        files={
+            ".git/hooks/upload.yml": UPLOAD_STEP,
+            "vendor/lib/.git/upload.yml": UPLOAD_STEP,
+            "build/lib/upload.yml": UPLOAD_STEP,
+            "dist/upload.yaml": UPLOAD_STEP,
+            ".venv/pyvenv.cfg": "home = /usr/bin\n",
+            ".venv/lib/site-packages/pkg/upload.yml": UPLOAD_STEP,
+            "tools/env2/pyvenv.cfg": "home = /usr/bin\n",
+            "tools/env2/upload.yml": UPLOAD_STEP,
+        },
+    )
     assert guard.pr_checks(tmp_path) == []
 
 
+# Any mention fails, false and comments too: YAML reads "false" with a next line "true"
+# as "false true", and the action treats every value but "false" as on.
 @pytest.mark.parametrize(
-    "lines, key",
+    "lines",
     [
-        ("with:\n  skip-existing: true", "skip-existing"),
-        ("with:\n  skip_existing: true", "skip_existing"),
-        ("with:\n  Skip-Existing: 'yes'", "Skip-Existing"),
-        ("with:\n  skip-existing: ${{ inputs.skip }}", "skip-existing"),
-        ("with:\n  skip-existing:", "skip-existing"),
-        ("with:\n  skip-existing: false#not-a-comment", "skip-existing"),
-        ("with:\n  ? skip-existing\n  : true", "skip-existing"),
-        ('with:\n  "skip\\x2dexisting": true', "skip-existing"),
-        ('with: {print-hash: "a #b", skip-existing: true}', "skip-existing"),
+        "with:\n  skip-existing: true",
+        "with:\n  skip_existing: true",
+        "with:\n  Skip-Existing: 'yes'",
+        "with:\n  skip-existing: ${{ inputs.skip }}",
+        "with:\n  skip-existing:",
+        "with:\n  skip-existing: false",
+        "with:\n  Skip-Existing: False",
+        "with:\n  skip-existing: false\n    true",
+        "with:\n  ? skip-existing\n  : true",
+        "with:\n  # skip-existing: true",
+        'with:\n  "skip\\x2dexisting": true',
+        'with:\n  "skip\\u002Dexisting": true',
+        'with:\n  "skip\\U0000005Fexisting": true',
+        'with: {print-hash: "a #b", skip-existing: true}',
     ],
 )
-def test_skip_existing_fails(tmp_path: Path, lines: str, key: str) -> None:
+def test_skip_existing_mentioned_fails(tmp_path: Path, lines: str) -> None:
     suffix = "".join(f"        {line}\n" for line in lines.splitlines())
     make_repo(tmp_path, publish=PUBLISH_YML + suffix)
-    # The first line that names the key is the one after "with:", or "with:" itself.
+    # The line that names it is the one after "with:", or "with:" itself.
     number = PUBLISH_LINES + (1 if lines.startswith("with: {") else 2)
-    expected = [f"publish.yml line {number} sets {key}; {SKIP_EXISTING_FIX}"]
-    assert guard.pr_checks(tmp_path) == expected
+    assert guard.pr_checks(tmp_path) == [skip_existing_at(number)]
 
 
-@pytest.mark.parametrize(
-    "line",
-    [
-        "skip-existing: false",
-        "skip-existing: False",
-        'skip-existing: "false"',
-        "skip_existing: 'FALSE'",
-        "skip-existing: false  # explicit",
-        "skip-existing: false   ",
-        "# skip-existing: true",
-    ],
-)
-def test_skip_existing_false_passes(tmp_path: Path, line: str) -> None:
-    make_repo(tmp_path, publish=PUBLISH_YML + f"        with:\n          {line}\n")
-    assert guard.pr_checks(tmp_path) == []
+def test_each_skip_existing_line_is_named(tmp_path: Path) -> None:
+    with_false = "        with:\n          skip-existing: false\n"
+    make_repo(tmp_path, publish="# skip_existing stays off\n" + PUBLISH_YML + with_false)
+    assert guard.pr_checks(tmp_path) == [skip_existing_at(1), skip_existing_at(PUBLISH_LINES + 3)]
 
 
 def test_escape_beyond_unicode_is_kept(tmp_path: Path) -> None:
@@ -352,9 +391,7 @@ def test_escape_beyond_unicode_is_kept(tmp_path: Path) -> None:
 
 def test_tag_runs_the_pr_checks(tmp_path: Path) -> None:
     make_repo(tmp_path, publish=PUBLISH_YML + "        with:\n          skip-existing: true\n")
-    assert tag_failures(tmp_path) == [
-        f"publish.yml line {PUBLISH_LINES + 2} sets skip-existing; {SKIP_EXISTING_FIX}"
-    ]
+    assert tag_failures(tmp_path) == [skip_existing_at(PUBLISH_LINES + 2)]
 
 
 # --pr rules: pyproject.toml. Each must also fail --tag.
@@ -495,8 +532,13 @@ def test_pypi_unreachable_fails_closed(tmp_path: Path, error: Exception, shown: 
         b"[]",
         b'{"name": "langchain-brightdata"}',
         b'{"releases": {"0.2.1": []}}',
-        b'{"versions": "0.2.1"}',
-        b'{"versions": [1]}',
+        b'{"versions": []}',
+        b'{"versions": "0.2.1", "files": []}',
+        b'{"versions": [1], "files": []}',
+        b'{"versions": [], "files": {}}',
+        b'{"versions": [], "files": [1]}',
+        b'{"versions": [], "files": [{"url": "x"}]}',
+        b'{"versions": [], "files": [{"filename": 1}]}',
     ],
 )
 def test_pypi_bad_json_fails_closed(tmp_path: Path, body: bytes) -> None:
@@ -587,32 +629,80 @@ def test_head_on_main_with_real_git(tmp_path: Path, monkeypatch: pytest.MonkeyPa
 # --tag rules: release candidate first
 
 
-def rc_failures(tmp_path: Path, version: str, listed: Sequence[str]) -> List[str]:
+def rc_failures(
+    tmp_path: Path,
+    version: str,
+    listed: Sequence[str],
+    yanked: Sequence[str] = (),
+    files: Optional[Sequence[str]] = None,
+) -> List[str]:
     """--tag failures for releasing version when PyPI lists today's versions plus listed."""
     make_repo(tmp_path, version=version)
     env = {"GITHUB_WORKFLOW_REF": GOOD_REF.replace("v0.2.1", f"v{version}")}
-    fetch = pypi([*PYPI_VERSIONS_2026_10_07, *listed])
+    fetch = pypi([*PYPI_VERSIONS_2026_10_07, *listed], yanked=yanked, files=files)
     return tag_failures(tmp_path, tag=f"v{version}", env=env, fetch=fetch)
+
+
+def no_rc(version: str) -> str:
+    return (
+        f"{version} has no release candidate on PyPI; set [project].version to {version}rc1, "
+        f"tag v{version}rc1, test it with pip install --pre, then release {version}"
+    )
 
 
 def test_final_without_rc_on_pypi_fails(tmp_path: Path) -> None:
     assert rc_failures(tmp_path, "0.2.1", []) == [
-        "0.2.1 has no release candidate on PyPI; tag v0.2.1rc1 first and test it"
+        "0.2.1 has no release candidate on PyPI; set [project].version to 0.2.1rc1, "
+        "tag v0.2.1rc1, test it with pip install --pre, then release 0.2.1"
     ]
 
 
 def test_rc_of_another_version_does_not_count(tmp_path: Path) -> None:
     assert rc_failures(tmp_path, "0.3.0", ["0.2.1rc1"]) == [
-        "0.3.0 has no release candidate on PyPI; tag v0.3.0rc1 first and test it"
+        "0.3.0 has no release candidate on PyPI; set [project].version to 0.3.0rc1, "
+        "tag v0.3.0rc1, test it with pip install --pre, then release 0.3.0"
     ]
 
 
-# Not an rc of 0.2.1: a longer version that starts the same, an older rc, a beta, a dev build.
-@pytest.mark.parametrize("listed", ["0.2.10rc1", "0.2.0rc1", "0.2.1b1", "0.2.1.dev1"])
+# Not an rc of 0.2.1: a longer version that starts the same, an older rc, an alpha, a beta,
+# a dev build, and a dev or post release of an rc.
+@pytest.mark.parametrize(
+    "listed",
+    [
+        "0.2.10rc1", "0.2.0rc1", "0.2.1a1", "0.2.1b1", "0.2.1.dev1", "0.2.1rc1.dev1",
+        "0.2.1rc1.post1",
+    ],
+)
 def test_only_an_rc_of_the_same_version_counts(tmp_path: Path, listed: str) -> None:
-    assert rc_failures(tmp_path, "0.2.1", [listed]) == [
-        "0.2.1 has no release candidate on PyPI; tag v0.2.1rc1 first and test it"
+    assert rc_failures(tmp_path, "0.2.1", [listed]) == [no_rc("0.2.1")]
+
+
+def test_yanked_rc_does_not_count(tmp_path: Path) -> None:
+    yanked = wheel_and_sdist("0.2.1rc1")
+    assert rc_failures(tmp_path, "0.2.1", ["0.2.1rc1"], yanked=yanked) == [no_rc("0.2.1")]
+
+
+@pytest.mark.parametrize("yanked", wheel_and_sdist("0.2.1rc1"))
+def test_rc_with_one_file_not_yanked_counts(tmp_path: Path, yanked: str) -> None:
+    assert rc_failures(tmp_path, "0.2.1", ["0.2.1rc1"], yanked=[yanked]) == []
+
+
+def test_file_without_a_yanked_key_is_not_yanked(tmp_path: Path) -> None:
+    # PEP 691 makes "yanked" optional; leaving it out means the file is not yanked.
+    files = [{"filename": "langchain_brightdata-0.2.1rc1.tar.gz"}]
+    page = {"versions": [*PYPI_VERSIONS_2026_10_07, "0.2.1rc1"], "files": files}
+    make_repo(tmp_path)
+    assert tag_failures(tmp_path, fetch=lambda url: json.dumps(page).encode()) == []
+
+
+def test_file_names_that_do_not_parse_are_skipped(tmp_path: Path) -> None:
+    files = [
+        "langchain_brightdata-0.2.1rc1.exe",
+        "langchain_brightdata-0.2.1rc1-bad.whl",
+        "langchain_brightdata-0.2.1rc1x.tar.gz",
+        *wheel_and_sdist("0.2.0"),
     ]
+    assert rc_failures(tmp_path, "0.2.1", ["0.2.1rc1"], files=files) == [no_rc("0.2.1")]
 
 
 # 0.2.1.0rc1 is 0.2.1rc1 under PEP 440, which is how PyPI compares versions.
@@ -626,13 +716,34 @@ def test_rc_passes_with_or_without_an_earlier_rc(tmp_path: Path, listed: List[st
     assert rc_failures(tmp_path, "0.2.1rc2", listed) == []
 
 
+# A yanked final still blocks: its version can never be uploaded again.
 @pytest.mark.parametrize(
-    "version, listed", [("0.2.1rc1", ["0.2.1"]), ("0.2.1rc2", ["0.2.1rc1", "0.2.1"])]
+    "version, listed, yanked, final, next_rc",
+    [
+        ("0.2.1rc2", ["0.2.1rc1", "0.2.1"], [], "0.2.1", "0.2.2rc1"),
+        ("0.2.1rc1", ["0.2.1"], wheel_and_sdist("0.2.1"), "0.2.1", "0.2.2rc1"),
+        ("1.4.9rc1", ["1.4.9"], [], "1.4.9", "1.4.10rc1"),
+    ],
 )
-def test_rc_after_its_final_fails(tmp_path: Path, version: str, listed: List[str]) -> None:
-    assert rc_failures(tmp_path, version, listed) == [
-        "0.2.1 is already released; an rc for it is too late"
+def test_rc_after_its_final_fails(
+    tmp_path: Path, version: str, listed: List[str], yanked: List[str], final: str, next_rc: str
+) -> None:
+    assert rc_failures(tmp_path, version, listed, yanked=yanked) == [
+        f"{final} is already on PyPI, so pip never installs an rc of it by default; "
+        f"set [project].version to the next version's rc (for example {next_rc}) and tag that"
     ]
+
+
+def test_too_late_message_exactly(tmp_path: Path) -> None:
+    assert rc_failures(tmp_path, "0.2.1rc1", ["0.2.1"]) == [
+        "0.2.1 is already on PyPI, so pip never installs an rc of it by default; "
+        "set [project].version to the next version's rc (for example 0.2.2rc1) and tag that"
+    ]
+
+
+def test_backport_rc_passes(tmp_path: Path) -> None:
+    # Only the same X.Y.Z final makes an rc too late; a newer final does not.
+    assert rc_failures(tmp_path, "0.2.1rc1", ["0.3.0rc1", "0.3.0"]) == []
 
 
 @pytest.mark.parametrize("version", ["0.2.1.dev1", "0.2.1.post1", "1.0"])
@@ -644,6 +755,12 @@ def test_no_rc_advice_for_a_version_no_tag_can_match(tmp_path: Path, version: st
     ]
 
 
+def test_no_rc_advice_for_a_version_that_is_not_canonical(tmp_path: Path) -> None:
+    assert rc_failures(tmp_path, "0.02.1", []) == [
+        "pyproject version 0.02.1 is not canonical PEP 440; write it as 0.2.1"
+    ]
+
+
 # The repository itself
 
 
@@ -652,6 +769,4 @@ def test_repo_fails_only_on_skip_existing(capsys: pytest.CaptureFixture) -> None
     assert guard.main(["--pr"]) == 1
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert captured.err.splitlines() == [
-        f"publish.yml line 39 sets skip-existing; {SKIP_EXISTING_FIX}"
-    ]
+    assert captured.err.splitlines() == [skip_existing_at(39)]
