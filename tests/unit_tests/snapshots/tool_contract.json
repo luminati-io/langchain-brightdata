@@ -1,0 +1,141 @@
+{
+  "tools": {
+    "BrightDataSERP": {
+      "name": "brightdata_serp",
+      "args": [
+        "query",
+        "zone",
+        "search_engine",
+        "country",
+        "language",
+        "results_count",
+        "search_type",
+        "device_type",
+        "parse_results"
+      ],
+      "required": [
+        "query"
+      ]
+    },
+    "BrightDataUnlocker": {
+      "name": "brightdata_Unlocker",
+      "args": [
+        "url",
+        "format",
+        "country",
+        "zone",
+        "data_format"
+      ],
+      "required": [
+        "url"
+      ]
+    },
+    "BrightDataWebScraperAPI": {
+      "name": "brightdata_web_scraper",
+      "args": [
+        "dataset_type",
+        "url",
+        "keyword",
+        "first_name",
+        "last_name",
+        "num_of_reviews",
+        "num_of_comments",
+        "days_limit",
+        "zipcode"
+      ],
+      "required": [
+        "dataset_type"
+      ]
+    }
+  },
+  "dataset_types": [
+    "amazon_product",
+    "amazon_product_reviews",
+    "amazon_product_search",
+    "walmart_product",
+    "walmart_seller",
+    "ebay_product",
+    "homedepot_products",
+    "zara_products",
+    "etsy_products",
+    "bestbuy_products",
+    "linkedin_person_profile",
+    "linkedin_company_profile",
+    "linkedin_job_listings",
+    "linkedin_posts",
+    "linkedin_people_search",
+    "crunchbase_company",
+    "zoominfo_company_profile",
+    "instagram_profiles",
+    "instagram_posts",
+    "instagram_reels",
+    "instagram_comments",
+    "facebook_posts",
+    "facebook_marketplace_listings",
+    "facebook_company_reviews",
+    "facebook_events",
+    "tiktok_profiles",
+    "tiktok_posts",
+    "tiktok_shop",
+    "tiktok_comments",
+    "google_maps_reviews",
+    "google_shopping",
+    "google_play_store",
+    "youtube_profiles",
+    "youtube_videos",
+    "youtube_comments",
+    "apple_app_store",
+    "reuter_news",
+    "github_repository_file",
+    "yahoo_finance_business",
+    "x_posts",
+    "zillow_properties_listing",
+    "booking_hotel_listings",
+    "reddit_posts"
+  ],
+  "dataset_ids": {
+    "amazon_product": "gd_l7q7dkf244hwjntr0",
+    "amazon_product_reviews": "gd_le8e811kzy4ggddlq",
+    "amazon_product_search": "gd_lwdb4vjm1ehb499uxs",
+    "walmart_product": "gd_l95fol7l1ru6rlo116",
+    "walmart_seller": "gd_m7ke48w81ocyu4hhz0",
+    "ebay_product": "gd_ltr9mjt81n0zzdk1fb",
+    "homedepot_products": "gd_lmusivh019i7g97q2n",
+    "zara_products": "gd_lct4vafw1tgx27d4o0",
+    "etsy_products": "gd_ltppk0jdv1jqz25mz",
+    "bestbuy_products": "gd_ltre1jqe1jfr7cccf",
+    "linkedin_person_profile": "gd_l1viktl72bvl7bjuj0",
+    "linkedin_company_profile": "gd_l1vikfnt1wgvvqz95w",
+    "linkedin_job_listings": "gd_lpfll7v5hcqtkxl6l",
+    "linkedin_posts": "gd_lyy3tktm25m4avu764",
+    "linkedin_people_search": "gd_m8d03he47z8nwb5xc",
+    "crunchbase_company": "gd_l1vijqt9jfj7olije",
+    "zoominfo_company_profile": "gd_m0ci4a4ivx3j5l6nx",
+    "instagram_profiles": "gd_l1vikfch901nx3by4",
+    "instagram_posts": "gd_lk5ns7kz21pck8jpis",
+    "instagram_reels": "gd_lyclm20il4r5helnj",
+    "instagram_comments": "gd_ltppn085pokosxh13",
+    "facebook_posts": "gd_lyclm1571iy3mv57zw",
+    "facebook_marketplace_listings": "gd_lvt9iwuh6fbcwmx1a",
+    "facebook_company_reviews": "gd_m0dtqpiu1mbcyc2g86",
+    "facebook_events": "gd_m14sd0to1jz48ppm51",
+    "tiktok_profiles": "gd_l1villgoiiidt09ci",
+    "tiktok_posts": "gd_lu702nij2f790tmv9h",
+    "tiktok_shop": "gd_m45m1u911dsa4274pi",
+    "tiktok_comments": "gd_lkf2st302ap89utw5k",
+    "google_maps_reviews": "gd_luzfs1dn2oa0teb81",
+    "google_shopping": "gd_ltppk50q18kdw67omz",
+    "google_play_store": "gd_lsk382l8xei8vzm4u",
+    "apple_app_store": "gd_lsk9ki3u2iishmwrui",
+    "reuter_news": "gd_lyptx9h74wtlvpnfu",
+    "github_repository_file": "gd_lyrexgxc24b3d4imjt",
+    "yahoo_finance_business": "gd_lmrpz3vxmz972ghd7",
+    "x_posts": "gd_lwxkxvnf1cynvib9co",
+    "zillow_properties_listing": "gd_lfqkr8wm13ixtbd8f5",
+    "booking_hotel_listings": "gd_m5mbdl081229ln6t4a",
+    "youtube_profiles": "gd_lk538t2k2p1k3oos71",
+    "youtube_videos": "gd_m5mbdl081229ln6t4a",
+    "youtube_comments": "gd_lk9q0ew71spt1mxywf",
+    "reddit_posts": "gd_lvz8ah06191smkebj4"
+  }
+}

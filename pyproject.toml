@@ -47,6 +47,11 @@ dev = [
     "pytest-asyncio>=0.21.0",
     "black>=23.0.0",
     "ruff>=0.1.0",
+    # Python 3.9 needs the older lines: pytest-socket 0.8 and langchain-tests 1.x require 3.10+.
+    "pytest-socket==0.8.1; python_version >= '3.10'",
+    "pytest-socket==0.7.0; python_version < '3.10'",
+    "langchain-tests==1.1.9; python_version >= '3.10'",
+    "langchain-tests==0.3.22; python_version < '3.10'",
 ]
 
 [project.urls]
@@ -74,3 +79,8 @@ select = ["E", "F", "W", "I"]
 [tool.black]
 line-length = 100
 target-version = ["py39", "py310", "py311", "py312"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Tests never touch the network. --allow-unix-socket keeps asyncio's socketpair working.
+addopts = "--disable-socket --allow-unix-socket"
