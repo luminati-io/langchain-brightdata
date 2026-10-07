@@ -78,8 +78,8 @@ target-version = "py39"
 select = ["E", "F", "W", "I"]
 
 [tool.ruff.lint.per-file-ignores]
-# Long lines and whitespace-only blank lines in package code sit mostly inside the
-# LLM-facing description strings; rewrapping them is not a lint job. tests/ get every rule.
+# Long lines and whitespace-only blank lines in package code, many inside the LLM-facing
+# description strings; rewrapping those is not a lint job. tests/ get every rule.
 "langchain_brightdata/*.py" = ["E501", "W293"]
 
 [tool.black]
