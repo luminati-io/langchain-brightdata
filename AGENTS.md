@@ -20,7 +20,7 @@ All of them must pass before a PR is ready; CI runs the same commands. ruff is p
 - Never rename the repository or `.github/workflows/publish.yml`. PyPI trusts uploads only from that file in this repository.
 - Keep the PyPI upload step directly in `publish.yml`. Never move it into a reusable workflow or a composite action.
 - Never add `skip-existing` to the upload step. The guard fails on any mention of it in `publish.yml`, comments included, so never write that name anywhere in that file.
-- Never change `[project].name` in `pyproject.toml`.
+- Never change `[project].name` in `pyproject.toml`. Change `[project].version` only when the maintainer asks.
 - Never rewrite the version inside a workflow. The release version is the one committed in `pyproject.toml`.
 - Tests stay offline. pytest-socket blocks the network and `tests/conftest.py` forces a fake API key. Never use a real key in tests.
 - `tests/fixtures/` holds scrubbed recordings of real API replies. Never commit a real API key, zone name or customer data. Only a maintainer re-records them.
