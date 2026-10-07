@@ -2,47 +2,50 @@
   "tools": {
     "BrightDataSERP": {
       "name": "brightdata_serp",
-      "args": [
-        "query",
-        "zone",
-        "search_engine",
-        "country",
-        "language",
-        "results_count",
-        "search_type",
-        "device_type",
-        "parse_results"
-      ],
+      "description": "Perform search engine queries with geo-targeting and customization options. Useful for finding information on the web from specific countries or languages. Returns search engine results, which can be filtered by type (web, news, images, shopping). Input should be a search query along with optional parameters.",
+      "args": {
+        "query": "Search query to perform with the SERP API",
+        "zone": "Bright Data SERP API zone name.\n\n        This should match the zone name configured in your Bright Data account.\n        Default is \"serp\".\n        ",
+        "search_engine": "Search engine to use for the query.\n        \n        Default is \"google\". Other options include \"bing\", \"yahoo\", etc.\n        ",
+        "country": "Two-letter country code for localized search results.\n        \n        Examples: \"us\", \"gb\", \"de\", \"jp\", etc.\n        \n        Default is \"us\".\n        ",
+        "language": "Two-letter language code for the search results.\n        \n        Examples: \"en\", \"es\", \"fr\", \"de\", etc.\n        \n        Default is \"en\".\n        ",
+        "results_count": "Number of search results to return.\n        \n        Default is 10. Maximum value is typically 100.\n        ",
+        "search_type": "Type of search to perform.\n        \n        Options include:\n        - None (default): Regular web search\n        - \"isch\": Images search\n        - \"shop\": Shopping search\n        - \"nws\": News search\n        - \"jobs\": Jobs search\n        ",
+        "device_type": "Device type to simulate for the search.\n        \n        Options include:\n        - None (default): Desktop device\n        - \"mobile\": Generic mobile device\n        - \"ios\": iOS device (iPhone)\n        - \"android\": Android device\n        ",
+        "parse_results": "Whether to return parsed JSON results.\n        \n        Default is True, which returns structured JSON.\n        Set to False to get raw HTML response.\n        "
+      },
       "required": [
         "query"
       ]
     },
     "BrightDataUnlocker": {
       "name": "brightdata_Unlocker",
-      "args": [
-        "url",
-        "format",
-        "country",
-        "zone",
-        "data_format"
-      ],
+      "description": "Access websites that might be geo-restricted or protected by anti-bot measures. Useful for retrieving content from websites that would normally block access. Returns page content, which can be in HTML, markdown, or screenshot format. Input should be a URL to access along with optional parameters for country, format, etc.",
+      "args": {
+        "url": "URL to access with the Bright Data Web Unlocker",
+        "format": "Format of the response content (raw is standard)",
+        "country": "Two-letter country code for geo-specific access.\n        \n        Set this when you need to view the website as if accessing from a specific country.\n        Example values: \"us\", \"gb\", \"de\", \"jp\", etc.\n        \n        Leave as None to use default country routing.\n        ",
+        "zone": "Bright Data zone to use for the request.\n        \n        The \"unlocker\" zone is optimized for accessing websites that might block regular requests.\n        \n        Default is \"unlocker\".\n        ",
+        "data_format": "Output format for the retrieved content.\n        \n        \"html\" - Returns the standard HTML content (default)\n        \"markdown\" - Returns content converted to markdown format (useful for LLM training)\n        \"screenshot\" - Returns a PNG screenshot of the rendered page\n        \n        Leave as None to use the default HTML format.\n        "
+      },
       "required": [
         "url"
       ]
     },
     "BrightDataWebScraperAPI": {
       "name": "brightdata_web_scraper",
-      "args": [
-        "dataset_type",
-        "url",
-        "keyword",
-        "first_name",
-        "last_name",
-        "num_of_reviews",
-        "num_of_comments",
-        "days_limit",
-        "zipcode"
-      ],
+      "description": "Extract structured data from 45+ websites. Use 'dataset_type' to specify the data source (e.g., 'amazon_product' for Amazon products, 'linkedin_person_profile' for LinkedIn profiles). Most datasets only require 'url'. Special cases: amazon_product_search needs 'keyword', linkedin_people_search needs 'first_name' and 'last_name', facebook_company_reviews needs 'num_of_reviews'.",
+      "args": {
+        "dataset_type": "Type of dataset to extract. Choose based on the website:\n- E-commerce: amazon_product, amazon_product_reviews, amazon_product_search, walmart_product, walmart_seller, ebay_product, homedepot_products, zara_products, etsy_products, bestbuy_products\n- LinkedIn: linkedin_person_profile, linkedin_company_profile, linkedin_job_listings, linkedin_posts, linkedin_people_search\n- Business: crunchbase_company, zoominfo_company_profile\n- Instagram: instagram_profiles, instagram_posts, instagram_reels, instagram_comments\n- Facebook: facebook_posts, facebook_marketplace_listings, facebook_company_reviews, facebook_events\n- TikTok: tiktok_profiles, tiktok_posts, tiktok_shop, tiktok_comments\n- Google: google_maps_reviews, google_shopping, google_play_store\n- YouTube: youtube_profiles, youtube_videos, youtube_comments\n- Other: apple_app_store, reuter_news, github_repository_file, yahoo_finance_business, x_posts, zillow_properties_listing, booking_hotel_listings, reddit_posts",
+        "url": "URL to extract data from. Required for most datasets. Must be a valid URL for the chosen platform.",
+        "keyword": "Search keyword. Required only for amazon_product_search.",
+        "first_name": "First name. Required only for linkedin_people_search.",
+        "last_name": "Last name. Required only for linkedin_people_search.",
+        "num_of_reviews": "Number of reviews to fetch. Required for facebook_company_reviews.",
+        "num_of_comments": "Number of comments to fetch. Used by youtube_comments (default: 10).",
+        "days_limit": "Number of days to limit results. Used by google_maps_reviews (default: 3).",
+        "zipcode": "Zipcode for location-specific data (e.g., for Amazon products with regional pricing)."
+      },
       "required": [
         "dataset_type"
       ]

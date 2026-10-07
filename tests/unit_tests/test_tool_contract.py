@@ -1,8 +1,8 @@
 """What the LLM sees from each tool must match snapshots/tool_contract.json.
 
-Checks tool names, arg field names, required fields, dataset_type values and
-dataset ids. Fields only, not the full JSON schema (that differs between
-langchain-core 0.3 and 1.x).
+Checks tool names and descriptions, arg names (in order) and descriptions,
+required fields, dataset_type values and dataset ids. Fields only, not the full
+JSON schema (that differs between langchain-core 0.3 and 1.x).
 
 A failure here means a change to what an LLM sees or to which dataset is
 called. If the change is intended, regenerate the snapshot and review the diff:
@@ -34,7 +34,8 @@ def _tool_contract(tool: BaseTool) -> Dict[str, Any]:
     fields = tool.get_input_schema().model_fields
     return {
         "name": tool.name,
-        "args": list(fields),
+        "description": tool.description,
+        "args": {name: field.description for name, field in fields.items()},
         "required": [name for name, field in fields.items() if field.is_required()],
     }
 
@@ -61,7 +62,9 @@ def test_tool_contract_matches_snapshot() -> None:
     expected = json.loads(SNAPSHOT.read_text(encoding="utf-8"))
 
     for name in sorted(set(expected["tools"]) | set(current["tools"])):
-        assert current["tools"].get(name) == expected["tools"].get(name), f"tool {name}"
+        now, then = current["tools"].get(name), expected["tools"].get(name)
+        assert now == then, f"tool {name}"
+        assert list(now["args"]) == list(then["args"]), f"tool {name}: arg order"
     assert current["dataset_types"] == expected["dataset_types"]
     # Known bug: youtube_videos has the same dataset id as booking_hotel_listings
     # (gd_m5mbdl081229ln6t4a). The snapshot records it as it is today; unit F4

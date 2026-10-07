@@ -1,4 +1,9 @@
-"""LangChain standard unit tests (langchain-tests ToolsUnitTests) for each tool."""
+"""LangChain standard unit tests (langchain-tests ToolsUnitTests) for each tool.
+
+The key lives on tool.api_wrapper, so init_from_env_params compares the whole
+wrapper (pydantic compares SecretStr by its value). The env value differs from
+the autouse fixture's "test-key", so test_init_from_env proves the tool reads it.
+"""
 
 from typing import Any, Dict, Tuple, Type
 
@@ -14,11 +19,8 @@ from langchain_brightdata import (
 )
 
 API_KEY = "test-key"
-ENV = {"BRIGHT_DATA_API_KEY": API_KEY}
-
-
-# The key lives on tool.api_wrapper, so init_from_env_params compares the whole
-# wrapper (pydantic compares SecretStr by its value).
+ENV_KEY = "env-key"
+ENV = {"BRIGHT_DATA_API_KEY": ENV_KEY}
 
 
 class TestBrightDataSERPStandard(ToolsUnitTests):
@@ -36,7 +38,7 @@ class TestBrightDataSERPStandard(ToolsUnitTests):
 
     @property
     def init_from_env_params(self) -> Tuple[Dict[str, str], Dict[str, Any], Dict[str, Any]]:
-        return ENV, {}, {"api_wrapper": BrightDataSERPAPIWrapper(bright_data_api_key=API_KEY)}
+        return ENV, {}, {"api_wrapper": BrightDataSERPAPIWrapper(bright_data_api_key=ENV_KEY)}
 
 
 class TestBrightDataUnlockerStandard(ToolsUnitTests):
@@ -54,7 +56,7 @@ class TestBrightDataUnlockerStandard(ToolsUnitTests):
 
     @property
     def init_from_env_params(self) -> Tuple[Dict[str, str], Dict[str, Any], Dict[str, Any]]:
-        return ENV, {}, {"api_wrapper": BrightDataUnlockerAPIWrapper(bright_data_api_key=API_KEY)}
+        return ENV, {}, {"api_wrapper": BrightDataUnlockerAPIWrapper(bright_data_api_key=ENV_KEY)}
 
 
 class TestBrightDataWebScraperAPIStandard(ToolsUnitTests):
@@ -75,5 +77,5 @@ class TestBrightDataWebScraperAPIStandard(ToolsUnitTests):
         return (
             ENV,
             {},
-            {"api_wrapper": BrightDataWebScraperAPIWrapper(bright_data_api_key=API_KEY)},
+            {"api_wrapper": BrightDataWebScraperAPIWrapper(bright_data_api_key=ENV_KEY)},
         )

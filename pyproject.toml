@@ -82,5 +82,7 @@ target-version = ["py39", "py310", "py311", "py312"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# Tests never touch the network. --allow-unix-socket keeps asyncio's socketpair working.
+# Tests never touch the network. --allow-unix-socket keeps asyncio's socketpair working on
+# Linux and macOS (CI runs on Linux). On Windows socketpair uses TCP, so asyncio.new_event_loop()
+# raises SocketBlockedError there. Future async tests: run them on Linux/macOS or WSL.
 addopts = "--disable-socket --allow-unix-socket"
