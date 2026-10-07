@@ -11,8 +11,10 @@ permissions:
   contents: read
 
 concurrency:
-  # The ci- prefix keeps this group apart from a calling workflow's own group.
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  # A new push to a PR cancels its older run. Every other run (main, release) gets
+  # its own group, so none is cancelled while queued. The ci- prefix keeps this
+  # group apart from a calling workflow's own group.
+  group: ci-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # No setup-python cache: the release workflow calls this one, and caches in a
@@ -34,6 +36,7 @@ jobs:
         with:
           python-version: "3.13"
 
+      # Keep in sync with the ruff pin in pyproject.toml.
       - name: Install ruff
         run: python -m pip install ruff==0.16.10
 
