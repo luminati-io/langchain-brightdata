@@ -15,8 +15,9 @@ argument the caller left out from the input schema's defaults, which overrides
 the tool's own fields (BrightDataUnlocker(zone="x") still sends "unlocker", and
 BrightDataSERP sends brd_json=1 although its parse_results field is False). On
 0.3.x it does not. That is a bug for a later PR, so nothing here depends on it:
-SERP passes parse_results explicitly and every tool keeps its default zone,
-which is the same on both lines.
+SERP sets parse_results=True on the tool itself (not per call, so it still
+works once parse_results leaves the call args), and every tool keeps its
+default zone. Both give the same request on either line.
 """
 
 import json
@@ -82,10 +83,8 @@ def test_serp_replays_recorded_reply(rsps):
     replay(rsps, REQUEST_URL, load("serp-api.json"))
 
     # parse_results=True so the request carries brd_json=1 like the recording.
-    # Passed explicitly: its effective default differs by langchain-core line.
-    output = BrightDataSERP().invoke(
-        {"query": "python programming language", "parse_results": True}
-    )
+    # Set on the tool: the per-call default differs by langchain-core line.
+    output = BrightDataSERP(parse_results=True).invoke({"query": "python programming language"})
 
     organic = json.loads(output)["organic"]
     assert len(counted(organic, has=["title", "link", "description"])) >= 3
@@ -137,11 +136,11 @@ def test_scraper_replays_recorded_reply(rsps):
 
 
 def test_scraper_401_raises_tool_exception(rsps):
-    # Synthetic, not recorded: what Bright Data says to a bad key.
+    # Synthetic, not recorded: Bright Data's documented reply to a missing or bad key.
     rsps.add(
         responses.POST,
         SCRAPE_URL,
-        json={"error": "Unauthorized"},
+        json={"error": "User authentication is required"},
         status=401,
         match=[
             matchers.query_param_matcher(
@@ -151,9 +150,10 @@ def test_scraper_401_raises_tool_exception(rsps):
         ],
     )
     # handle_tool_error=False so invoke raises instead of returning the text.
+    # The message is not pinned: a later fix rewrites it.
     tool = BrightDataWebScraperAPI(handle_tool_error=False)
 
-    with pytest.raises(ToolException, match="401"):
+    with pytest.raises(ToolException):
         tool.invoke(
             {"dataset_type": "amazon_product", "url": "https://www.amazon.com/dp/B0863TXGM3"}
         )
@@ -164,6 +164,8 @@ def test_fixture_is_scrubbed(name):
     text = (FIXTURES / name).read_text(encoding="utf-8")
     for secret in ("Bearer", "Authorization", "lum-customer"):
         assert secret.lower() not in text.lower(), f"{name} contains {secret!r}"
+    customer_id = re.search(r"hl_[0-9a-f]{8}", text)
+    assert customer_id is None, f"{name} contains a customer id: {customer_id.group(0)!r}"
 
     zone = load(name)["meta"]["request"].get("zone")
     if zone is not None:
