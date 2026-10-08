@@ -1,0 +1,8 @@
+# Release files: changes here need the maintainer's review.
+# Takes effect once main requires review from Code Owners.
+/.github/ @nirsha-brd
+/scripts/ @nirsha-brd
+/pyproject.toml @nirsha-brd
+/RELEASING.md @nirsha-brd
+/AGENTS.md @nirsha-brd
+/tests/unit_tests/snapshots/ @nirsha-brd
