@@ -94,4 +94,6 @@ testpaths = ["tests"]
 # Tests never touch the network. --allow-unix-socket keeps asyncio's socketpair working on
 # Linux and macOS (CI runs on Linux). On Windows socketpair uses TCP, so asyncio.new_event_loop()
 # raises SocketBlockedError there. Future async tests: run them on Linux/macOS or WSL.
-addopts = "--disable-socket --allow-unix-socket"
+addopts = "--disable-socket --allow-unix-socket -m 'not live'"
+# Live tests make real, paid Bright Data calls. Run them with: pytest -m live tests/integration_tests
+markers = ["live: real Bright Data calls with BRIGHTDATA_TEST_API_KEY"]

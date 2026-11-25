@@ -96,6 +96,40 @@ jobs:
       - name: Run the release guard
         run: python scripts/release_guard.py --pr
 
+  # Real Bright Data calls, one per tool. Observe mode: this job reports but does
+  # not block, and ci-ok does not need it. A run without the key says "not
+  # checked" instead of passing. Pull requests from forks never get the key.
+  live:
+    name: live (observe)
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+
+      - name: Install package and dev dependencies
+        run: python -m pip install -e ".[dev]"
+
+      - name: Run live tests
+        env:
+          BRIGHTDATA_TEST_API_KEY: ${{ secrets.BRIGHTDATA_TEST_API_KEY }}
+        run: |
+          if [ -z "$BRIGHTDATA_TEST_API_KEY" ]; then
+            echo "::warning title=Live tests not checked::BRIGHTDATA_TEST_API_KEY is not available to this run."
+            echo "Live tests: not checked (no key)." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          python -m pytest -m live tests/integration_tests -rA --tb=short
+
   # The one check a branch rule requires. It fails unless every job above
   # succeeded, so a failed, cancelled or skipped job cannot pass as green.
   ci-ok:
