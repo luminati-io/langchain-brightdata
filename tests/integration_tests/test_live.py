@@ -8,14 +8,17 @@ They are left out of the default run and skip when BRIGHTDATA_TEST_API_KEY is no
 """
 
 import json
+import uuid
 
 import pytest
+import requests
 
 from langchain_brightdata import (
     BrightDataSERP,
     BrightDataUnlocker,
     BrightDataWebScraperAPI,
 )
+from langchain_brightdata._utilities import BrightDataSERPAPIWrapper
 
 pytestmark = [pytest.mark.live, pytest.mark.enable_socket]
 
@@ -34,6 +37,30 @@ def test_search_returns_real_results() -> None:
     assert "brightdata.com" in text.lower(), (
         "Search for 'bright data' did not return a result from brightdata.com. "
         f"The tool returned: {_shown(text)}"
+    )
+
+
+def test_search_creates_a_missing_zone(fake_api_key: str) -> None:
+    """A zone name the account has never had: the wrapper creates it and still returns results.
+
+    Takes up to about five minutes. The zone is deleted afterwards.
+    """
+    zone = f"lc_test_{uuid.uuid4().hex[:10]}"
+    try:
+        text = BrightDataSERPAPIWrapper().get_search_results(
+            "bright data", zone=zone, parse_results=True
+        )
+    finally:
+        requests.delete(
+            "https://api.brightdata.com/zone",
+            json={"zone": zone},
+            headers={"Authorization": f"Bearer {fake_api_key}"},
+            timeout=120,
+        )
+
+    assert "brightdata.com" in text.lower(), (
+        f"Search through the new zone {zone} did not return a result from brightdata.com. "
+        f"The wrapper returned: {_shown(text)}"
     )
 
 
