@@ -1,5 +1,6 @@
 """Tool for the Bright Data Web Unlocker."""
 
+import warnings
 from typing import Any, Dict, Literal, Optional, Type
 
 from langchain_core.callbacks import (
@@ -58,6 +59,9 @@ class BrightDataUnlockerInput(BaseModel):
 
 class BrightDataUnlocker(BaseTool):
     """Tool that uses Bright Data's Web Unlocker to access websites.
+
+    Deprecated: use ``BrightDataWebFetch``. It reads pages with only an API key,
+    while this tool needs a Web Unlocker zone in the account.
     
     This tool allows you to access websites that may be protected by anti-bot measures,
     geo-restrictions, or other access limitations.
@@ -83,6 +87,13 @@ class BrightDataUnlocker(BaseTool):
 
     def __init__(self, **kwargs: Any) -> None:
         """Initialize the BrightDataUnlocker tool."""
+        warnings.warn(
+            "BrightDataUnlocker is deprecated since langchain-brightdata 0.2.1 and will be "
+            "removed in 1.0. Use BrightDataWebFetch, which reads pages with only an API key "
+            "and needs no zone.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         if "bright_data_api_key" in kwargs:
             kwargs["api_wrapper"] = BrightDataUnlockerAPIWrapper(
                 bright_data_api_key=kwargs["bright_data_api_key"]
