@@ -1,0 +1,222 @@
+{
+  "meta": {
+    "product": "serp-api",
+    "recorded_at": "2026-10-05T09:16:23+00:00",
+    "endpoint": "POST https://api.brightdata.com/request",
+    "request": {
+      "zone": "<BRIGHTDATA_SERP_ZONE>",
+      "url": "https://www.google.com/search?q=python+programming+language&brd_json=1&gl=us&hl=en",
+      "format": "raw"
+    },
+    "zone_type": "serp",
+    "input": {
+      "q": "python programming language",
+      "gl": "us",
+      "hl": "en"
+    },
+    "bytes_received": 20177,
+    "trimmed": "every list cut to its first 3 items, strings over 2000 characters cut",
+    "body_sha256": "6321370f9650c0c210c58ceb1a61bcad94c77606d9dec315e09f1cdc94b1ecdf"
+  },
+  "reply": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "general": {
+        "search_engine": "google",
+        "query": "python programming language",
+        "detected_query": "python programming language",
+        "results_cnt": 125,
+        "search_time": 0.43,
+        "language": "en",
+        "country_code": "US",
+        "location": "United States",
+        "gl": "US",
+        "mobile": false,
+        "basic_view": false,
+        "search_type": "text",
+        "page_title": "python programming language - Google Search",
+        "timestamp": "2026-10-05T09:16:19.295Z"
+      },
+      "input": {
+        "original_url": "https://www.google.com/search?q=python+programming+language&brd_json=1&gl=us&hl=en",
+        "request_id": "hl_<redacted>_1ykv25fs2em"
+      },
+      "navigation": [
+        {
+          "title": "AI Mode",
+          "href": "https://www.google.com/search?q=python+programming+language&sca_esv=53184d9e0d3ee8ec&hl=en&gl=us&rlz=1C1ONGR_enUS1171US1171&sxsrf=APpeQnuBzm8sVgtjnnw3UamQ8wJYjYZ6Mg:1791191778270&udm=50&fbs=ABfTbFVyMZGZf1hfvX9uKjN_-G8c4u0nXx4bEIpwm1lnNH832VTJOOCxW_fyN-Q_ezyf8gKCPb62Sv4Y60wQDsMxJw_GUn1N2yN6o6cIH09xVUI5GF-7X0eJNVl6LJkPJSEqcPiUQdDuUlq0Ssthj-kx25M3aV2G9ESD6MYogJMLXhdvgLrEy3qLlBsiJsb1-DItOgt347fUEFiHlCigczWlID-DH3v2Ag&vsint=&aep=1&ntc=1&cs=0&sa=X&ved=2ahUKEwjY-autxaKXAxVbUMMIHdXCLxQQ2J8OegQIFRAD"
+        },
+        {
+          "title": "Images",
+          "href": "https://www.google.com/search?sca_esv=53184d9e0d3ee8ec&hl=en&gl=us&rlz=1C1ONGR_enUS1171US1171&sxsrf=APpeQnuBzm8sVgtjnnw3UamQ8wJYjYZ6Mg:1791191778270&udm=2&fbs=ABfTbFVyMZGZf1hfvX9uKjN_-G8c4u0nXx4bEIpwm1lnNH832VTJOOCxW_fyN-Q_ezyf8gKCPb62Sv4Y60wQDsMxJw_GUn1N2yN6o6cIH09xVUI5GF-7X0eJNVl6LJkPJSEqcPiUQdDuUlq0Ssthj-kx25M3aV2G9ESD6MYogJMLXhdvgLrEy3qLlBsiJsb1-DItOgt347fUEFiHlCigczWlID-DH3v2Ag&q=python+programming+language&sa=X&ved=2ahUKEwjY-autxaKXAxVbUMMIHdXCLxQQtKgLegQIFxAB"
+        },
+        {
+          "title": "Videos",
+          "href": "https://www.google.com/search?sca_esv=53184d9e0d3ee8ec&hl=en&gl=us&rlz=1C1ONGR_enUS1171US1171&sxsrf=APpeQnuBzm8sVgtjnnw3UamQ8wJYjYZ6Mg:1791191778270&udm=vids&fbs=ABfTbFVyMZGZf1hfvX9uKjN_-G8c4u0nXx4bEIpwm1lnNH832VTJOOCxW_fyN-Q_ezyf8gKCPb62Sv4Y60wQDsMxJw_GUn1N2yN6o6cIH09xVUI5GF-7X0eJNVl6LJkPJSEqcPiUQdDuUlq0Ssthj-kx25M3aV2G9ESD6MYogJMLXhdvgLrEy3qLlBsiJsb1-DItOgt347fUEFiHlCigczWlID-DH3v2Ag&q=python+programming+language&sa=X&ved=2ahUKEwjY-autxaKXAxVbUMMIHdXCLxQQtKgLegQIGhAB"
+        }
+      ],
+      "organic": [
+        {
+          "link": "https://www.python.org/",
+          "source": "Python.org",
+          "display_link": "https://www.python.org",
+          "title": "Welcome to Python.org",
+          "description": "The official home of the Python Programming Language.",
+          "snippet_highlighted_words": [
+            "Python Programming Language"
+          ],
+          "extensions": [
+            {
+              "type": "site_link",
+              "extended": true,
+              "text": "Python For Beginners",
+              "link": "https://www.google.com/goto?url=CAESZwHrOzAV8xDNtEtw0gJTFnbuMXB4VqH1WRsaSlUCwMQ-HzlP6AT6u_9hE7ek2laZUIrcRsso94DqyVomCMUtH4_uBsG77hTwJxauKW-nzsDbJOv4vYHOAR_2vxcdn_Ww6OPpn88df3s",
+              "description": "The official home of the Python Programming Language ...",
+              "rank": 1
+            },
+            {
+              "type": "site_link",
+              "extended": true,
+              "text": "The Python Tutorial",
+              "link": "https://www.google.com/goto?url=CAESaAHrOzAVt83HzgwoLrN5M8Lh6kPRZhpXGYsYQb8CpI1D4g1ll7ETysuwViU-yRmIaYOgXaFiAFv2CBnWfDBha6zOUndZI793Rg0xogK3SNnZ50ks9UMe9ygm3JVY80gc8UpiV-imUXu1",
+              "description": "Python is an easy to learn, powerful programming ...",
+              "rank": 2
+            },
+            {
+              "type": "site_link",
+              "extended": true,
+              "text": "Python Language",
+              "link": "https://www.google.com/goto?url=CAESaQHrOzAVkEbEbuM33eDuKWlv_km2bt2M4efCgHbI5VY7FTwGv3gYAIAggx7ymuowyG4_pwDNS0DnGAvSgWmnt6vYYBUQPoV7oJcBnS5Sv3Waw2iRblkTl8EQCxxH7KOcu4l5hG19N29tAg",
+              "description": "For C or C++ programmers, two additional manuals exist ...",
+              "rank": 3
+            }
+          ],
+          "icon": "data:image/webp;base64,UklGRhABAABXRUJQVlA4IAQBAAAQBgCdASocABwAPrkurlcnIacnG/DgFwlsAKwvgahLlJOwArPau4oYr+TF4pmv7tRIycjbA1S6KAAA/vfvOx4iMbGr2IIfAzlq0yrImbAXSPP9pCwoPu38iLVQEYAeDSDF0BxhkSFQE6EOmFECMdm6P/k4sP69ei5vMwlIKLFha1rBJ/gY3NK3ROUz5Vw7XLLlOumZ0Kfue8tQpX6wdsDP8mJER7+9+JHp/S4Cc+83EaDhFlmDbIv5DcqpgX9SZVSycg0lqh80noVlGCA+tr0CaDZN4e79fkr0qz4SMULWdokTgvMl6n3GjDzn5B5vhtDSdA5UVKSJ9MVnlCiZEpVieRAAAA==",
+          "rank": 1,
+          "global_rank": 1
+        },
+        {
+          "link": "https://en.wikipedia.org/wiki/Python_(programming_language)",
+          "source": "Wikipedia",
+          "display_link": "https://en.wikipedia.org › wiki › Python_(programming...",
+          "title": "Python (programming language)",
+          "description": "Python is a high-level, general-purpose programming language that emphasizes code readability, simplicity, and ease-of-writing with the use of significant ...Read more",
+          "snippet_highlighted_words": [
+            "Python"
+          ],
+          "icon": "data:image/webp;base64,UklGRqIAAABXRUJQVlA4IJYAAACQBACdASocABwAPtEutFooIagoGAEAGglpAAPhag38OpTAa4LU1EDlND7sAAAA/vYBJn72wN5WCZhxbfpmwOpA1vfrecvWOCVICC3+/rM6qzQWc8D3etVbTfBEeNbqJu+10k1h5hVXEe/3vpL5NJSAtUHvrJ6e/LkA//pZx+xvTn7v+qaIRjl47m2LoP17C7tcoPGgAAA=",
+          "rank": 2,
+          "global_rank": 6
+        },
+        {
+          "link": "https://www.w3schools.com/python/python_intro.asp",
+          "source": "W3Schools",
+          "display_link": "https://www.w3schools.com › python › python_intro",
+          "title": "Introduction to Python",
+          "description": "Python is a popular programming language. It was created by Guido van Rossum, and released in 1991. It is used for: web development (server-side), ...Read more",
+          "snippet_highlighted_words": [
+            "Python is a popular programming language"
+          ],
+          "icon": "data:image/webp;base64,UklGRugAAABXRUJQVlA4INwAAADQBACdASocABwAPtE+tFooIigoFAEAGglsAAPi1TkHo2oDF7xBRDuri0JMwsUsmAD+/SptGZ3vVzTfFrlz6rihkzPHGZ36Aey9QPA9rPwLPXVbLiQASVz89swS+/amJpp3eLVmXcAvns/+qZA3dsifgf2TjvmmT/RmVGCuIWic5AKw8dKY17zR8atKHxuXDhDsIgHa+EP3re6+pdKYAPlbqbssZPsj9LtcH16un68d/Plytr2I/tbO/tpy7Wu522PzykQc13ChP2PdScTwq6zdJBN5joxOG+PAOYAA",
+          "rank": 3,
+          "global_rank": 7
+        }
+      ],
+      "videos": [
+        {
+          "link": "https://www.youtube.com/watch?v=K5KVEU3aaeQ",
+          "duration": "2:02:21",
+          "duration_sec": 7341,
+          "title": "Python Full Course for Beginners",
+          "source": "YouTube · Programming with Mosh",
+          "rank": 1,
+          "global_rank": 8
+        },
+        {
+          "link": "https://www.youtube.com/watch?v=mlTd1EPITBo",
+          "duration": "11:44",
+          "duration_sec": 704,
+          "title": "Part 1: What is Python & Why Learn It? - Python for Beginners",
+          "source": "YouTube · Dani Krossing",
+          "rank": 2,
+          "global_rank": 9
+        },
+        {
+          "link": "https://www.youtube.com/watch?v=Ro_MScTDfU4",
+          "duration": "30:42",
+          "duration_sec": 1842,
+          "title": "Learn Python in Only 30 Minutes (Beginner Tutorial)",
+          "source": "YouTube · Indently",
+          "rank": 3,
+          "global_rank": 10
+        }
+      ],
+      "pagination": {
+        "pages": [
+          {
+            "page": 2,
+            "start": 10,
+            "link": "https://www.google.com/search?q=python+programming+language&sca_esv=53184d9e0d3ee8ec&hl=en&gl=us&rlz=1C1ONGR_enUS1171US1171&sxsrf=APpeQnuBzm8sVgtjnnw3UamQ8wJYjYZ6Mg:1791191778270&ei=4mrDatiAENugjfYP1YW_oQE&start=10&sa=N&sstk=AS6-VmLQ9u1MS6crM646QnNaBduMXEqtvYWoXMFIJeNi87G8cGoD-3QLYf8mTEyIcGw6z-Oxtog1lb5UnvVrmGZ3T0yikh97PbA_ZQ&ved=2ahUKEwjY-autxaKXAxVbUMMIHdXCLxQQ8tMDegQILxAE"
+          },
+          {
+            "page": 3,
+            "start": 20,
+            "link": "https://www.google.com/search?q=python+programming+language&sca_esv=53184d9e0d3ee8ec&hl=en&gl=us&rlz=1C1ONGR_enUS1171US1171&sxsrf=APpeQnuBzm8sVgtjnnw3UamQ8wJYjYZ6Mg:1791191778270&ei=4mrDatiAENugjfYP1YW_oQE&start=20&sa=N&sstk=AS6-VmLQ9u1MS6crM646QnNaBduMXEqtvYWoXMFIJeNi87G8cGoD-3QLYf8mTEyIcGw6z-Oxtog1lb5UnvVrmGZ3T0yikh97PbA_ZQ&ved=2ahUKEwjY-autxaKXAxVbUMMIHdXCLxQQ8tMDegQILxAG"
+          },
+          {
+            "page": 4,
+            "start": 30,
+            "link": "https://www.google.com/search?q=python+programming+language&sca_esv=53184d9e0d3ee8ec&hl=en&gl=us&rlz=1C1ONGR_enUS1171US1171&sxsrf=APpeQnuBzm8sVgtjnnw3UamQ8wJYjYZ6Mg:1791191778270&ei=4mrDatiAENugjfYP1YW_oQE&start=30&sa=N&sstk=AS6-VmLQ9u1MS6crM646QnNaBduMXEqtvYWoXMFIJeNi87G8cGoD-3QLYf8mTEyIcGw6z-Oxtog1lb5UnvVrmGZ3T0yikh97PbA_ZQ&ved=2ahUKEwjY-autxaKXAxVbUMMIHdXCLxQQ8tMDegQILxAI"
+          }
+        ],
+        "current_page": 1,
+        "next_page": 2,
+        "next_page_start": 10,
+        "next_page_link": "https://www.google.com/search?q=python+programming+language&sca_esv=53184d9e0d3ee8ec&hl=en&gl=us&rlz=1C1ONGR_enUS1171US1171&sxsrf=APpeQnuBzm8sVgtjnnw3UamQ8wJYjYZ6Mg:1791191778270&ei=4mrDatiAENugjfYP1YW_oQE&start=10&sa=N&sstk=AS6-VmLQ9u1MS6crM646QnNaBduMXEqtvYWoXMFIJeNi87G8cGoD-3QLYf8mTEyIcGw6z-Oxtog1lb5UnvVrmGZ3T0yikh97PbA_ZQ&ved=2ahUKEwjY-autxaKXAxVbUMMIHdXCLxQQ8tMDegQILxAE"
+      },
+      "related": [
+        {
+          "text": "Python programming language PDF",
+          "link": "https://www.google.com/search?sca_esv=53184d9e0d3ee8ec&hl=en&gl=us&rlz=1C1ONGR_enUS1171US1171&sxsrf=APpeQnuBzm8sVgtjnnw3UamQ8wJYjYZ6Mg:1791191778270&q=Python+programming+language+PDF&sa=X&ved=2ahUKEwjY-autxaKXAxVbUMMIHdXCLxQQ1QJ6BAgxEAE",
+          "rank": 1,
+          "global_rank": 13
+        },
+        {
+          "text": "What is Python programming language used for",
+          "link": "https://www.google.com/search?sca_esv=53184d9e0d3ee8ec&hl=en&gl=us&rlz=1C1ONGR_enUS1171US1171&sxsrf=APpeQnuBzm8sVgtjnnw3UamQ8wJYjYZ6Mg:1791191778270&q=What+is+Python+programming+language+used+for&sa=X&ved=2ahUKEwjY-autxaKXAxVbUMMIHdXCLxQQ1QJ6BAg-EAE",
+          "rank": 2,
+          "global_rank": 14
+        },
+        {
+          "text": "Python programming for beginners PDF",
+          "link": "https://www.google.com/search?sca_esv=53184d9e0d3ee8ec&hl=en&gl=us&rlz=1C1ONGR_enUS1171US1171&sxsrf=APpeQnuBzm8sVgtjnnw3UamQ8wJYjYZ6Mg:1791191778270&q=Python+programming+for+beginners+PDF&sa=X&ved=2ahUKEwjY-autxaKXAxVbUMMIHdXCLxQQ1QJ6BAg8EAE",
+          "rank": 3,
+          "global_rank": 15
+        }
+      ],
+      "people_also_ask": [
+        {
+          "question": "Is Python easy to learn?",
+          "question_type": "ai_overview",
+          "rank": 1,
+          "global_rank": 2
+        },
+        {
+          "question": "Is Python a C++ language?",
+          "question_type": "ai_overview",
+          "rank": 2,
+          "global_rank": 3
+        },
+        {
+          "question": "What are the 33 words in Python?",
+          "question_type": "ai_overview",
+          "rank": 3,
+          "global_rank": 4
+        }
+      ]
+    }
+  }
+}

@@ -1,12 +1,12 @@
-from .brightdata_search import BrightDataSERP
-from .brightdata_unlocker import BrightDataUnlocker
-from .brightdata_scraper import BrightDataWebScraperAPI
 from ._utilities import (
     BrightDataAPIWrapper,
     BrightDataSERPAPIWrapper,
     BrightDataUnlockerAPIWrapper,
-    BrightDataWebScraperAPIWrapper
+    BrightDataWebScraperAPIWrapper,
 )
+from .brightdata_scraper import BrightDataWebScraperAPI
+from .brightdata_search import BrightDataSERP
+from .brightdata_unlocker import BrightDataUnlocker
 
 __all__ = [
     "BrightDataSERP",

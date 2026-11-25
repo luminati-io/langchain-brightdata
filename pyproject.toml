@@ -45,8 +45,17 @@ dependencies = [
 dev = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.21.0",
+    "responses>=0.23.0",
     "black>=23.0.0",
-    "ruff>=0.1.0",
+    "ruff==0.16.10",
+    # Python 3.9 needs the older lines: pytest-socket 0.8 and langchain-tests 1.x require 3.10+.
+    "pytest-socket==0.8.1; python_version >= '3.10'",
+    "pytest-socket==0.7.0; python_version < '3.10'",
+    "langchain-tests==1.1.9; python_version >= '3.10'",
+    "langchain-tests==0.3.22; python_version < '3.10'",
+    # For scripts/release_guard.py. tomllib is in the standard library from 3.11.
+    "packaging>=23.0",
+    "tomli>=1.0.0; python_version < '3.11'",
 ]
 
 [project.urls]
@@ -71,6 +80,20 @@ target-version = "py39"
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]
 
+[tool.ruff.lint.per-file-ignores]
+# Long lines and whitespace-only blank lines in package code, many inside the LLM-facing
+# description strings; rewrapping those is not a lint job. tests/ and scripts/ get every rule.
+"langchain_brightdata/*.py" = ["E501", "W293"]
+
 [tool.black]
 line-length = 100
 target-version = ["py39", "py310", "py311", "py312"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Tests never touch the network. --allow-unix-socket keeps asyncio's socketpair working on
+# Linux and macOS (CI runs on Linux). On Windows socketpair uses TCP, so asyncio.new_event_loop()
+# raises SocketBlockedError there. Future async tests: run them on Linux/macOS or WSL.
+addopts = "--disable-socket --allow-unix-socket -m 'not live'"
+# Live tests make real, paid Bright Data calls. Run them with: pytest -m live tests/integration_tests
+markers = ["live: real Bright Data calls with BRIGHTDATA_TEST_API_KEY"]

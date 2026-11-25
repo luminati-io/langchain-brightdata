@@ -1,6 +1,6 @@
 """Tool for the Bright Data Web Unlocker."""
 
-from typing import Any, Dict, List, Literal, Optional, Type
+from typing import Any, Dict, Literal, Optional, Type
 
 from langchain_core.callbacks import (
     CallbackManagerForToolRun,

@@ -1,0 +1,302 @@
+{
+  "meta": {
+    "product": "web-scraper-api",
+    "recorded_at": "2026-10-05T09:14:36+00:00",
+    "endpoint": "POST https://api.brightdata.com/datasets/v3/scrape?dataset_id=gd_l7q7dkf244hwjntr0&format=json",
+    "request": {
+      "input": [
+        {
+          "url": "https://www.amazon.com/dp/B0863TXGM3"
+        }
+      ]
+    },
+    "zone_type": null,
+    "input": {
+      "dataset_id": "gd_l7q7dkf244hwjntr0",
+      "url": "https://www.amazon.com/dp/B0863TXGM3"
+    },
+    "delivered": "sync: HTTP 200 with the records",
+    "bytes_received": 27350,
+    "trimmed": "every list cut to its first 3 items, strings over 2000 characters cut",
+    "body_sha256": "fe049afccba96d1a9f1133c2ff9410c132a4a08ea9ed5970b0ab751f43816b6e"
+  },
+  "reply": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "body": [
+      {
+        "title": "Sony WH-1000XM4 Wireless Noise Cancelling Headphones, Black",
+        "seller_name": "Amazon.com",
+        "brand": "Sony",
+        "description": "Sony’s intelligent industry-leading noise canceling headphones with premium sound elevate your listening experience with the ability to personalize and control everything you hear. Get up to 30 hours of battery life with quick charging capabilities, enjoy an enhanced Smart Listening feature set, and carry conversations hands-free with speak-to-chat.",
+        "initial_price": 462.89,
+        "currency": "USD",
+        "availability": "Only 1 left in stock - order soon.",
+        "reviews_count": 42859,
+        "categories": [
+          "Electronics",
+          "Headphones, Earbuds & Accessories",
+          "Headphones & Earbuds"
+        ],
+        "parent_asin": "B0863TXGM3",
+        "asin": "B0863TXGM3",
+        "buybox_seller": "Amazon.com",
+        "number_of_sellers": 1,
+        "root_bs_rank": 7382,
+        "answered_questions": 0,
+        "domain": "https://www.amazon.com/",
+        "images_count": 11,
+        "url": "https://www.amazon.com/dp/B0863TXGM3?th=1&psc=1&language=en_US&currency=USD",
+        "video_count": 1,
+        "image_url": "https://m.media-amazon.com/images/I/61oqO1AMbdL._AC_SL1500_.jpg",
+        "item_weight": "9 ounces",
+        "rating": 4.6,
+        "seller_id": "ATVPDKIKX0DER",
+        "image": "https://m.media-amazon.com/images/I/61oqO1AMbdL._AC_SL1500_.jpg",
+        "model_number": "WH1000XM4/B",
+        "manufacturer": "Sony",
+        "department": "Electronics",
+        "plus_content": true,
+        "upc": "027242919419",
+        "video": true,
+        "final_price_high": null,
+        "final_price": 462.89,
+        "delivery": [
+          "FREE delivery Saturday, October 10",
+          "Or Prime members get FREE delivery Wednesday, October 7. Order within 7 hrs. Join Prime"
+        ],
+        "features": [
+          "ACTIVE NOISE CANCELLATION: Premium noise canceling with Dual Noise Sensor technology",
+          "LONG BATTERY LIFE: Up to 30-hour battery life with quick charging (10 min charge for 5 hours of playback)(USB Type-C Cable included)",
+          "TOUCH SENSOR CONTROLS: Pause play skip tracks, control volume, activate your voice assistant, and answer phone calls."
+        ],
+        "buybox_prices": {
+          "final_price": 462.89,
+          "unit_price": null
+        },
+        "bought_past_month": 50,
+        "is_available": true,
+        "root_bs_category": "Electronics",
+        "bs_category": "Over-Ear Headphones",
+        "bs_rank": 288,
+        "badge": null,
+        "subcategory_rank": [
+          {
+            "subcategory_name": "Over-Ear Headphones",
+            "subcategory_rank": 288
+          }
+        ],
+        "amazon_choice": false,
+        "images": [
+          "https://m.media-amazon.com/images/I/61oqO1AMbdL._AC_SL1500_.jpg",
+          "https://m.media-amazon.com/images/I/81KwZzTIXJL._AC_SL1500_.jpg",
+          "https://m.media-amazon.com/images/I/81zNaO7AyoL._AC_SL1500_.jpg"
+        ],
+        "product_details": [
+          {
+            "type": "Brand Name",
+            "value": "Sony"
+          },
+          {
+            "type": "Model Number",
+            "value": "WH1000XM4/B"
+          },
+          {
+            "type": "Model Name",
+            "value": "WH-1000XM4"
+          }
+        ],
+        "prices_breakdown": null,
+        "country_of_origin": null,
+        "from_the_brand": null,
+        "product_description": [
+          {
+            "url": "https://m.media-amazon.com/images/S/aplus-media-library-service-media/7afe2909-2ffb-4dfe-bac3-fe36831fdf70.__CR0,0,1464,600_PT0_SX1464_V1___.jpg",
+            "type": "image"
+          },
+          {
+            "url": "https://m.media-amazon.com/images/S/aplus-media-library-service-media/dd1bbc74-b266-42f1-aa29-4eb419e76c0b.__CR0,22,773,416_PT0_SX650_V1___.jpg",
+            "type": "image"
+          },
+          {
+            "url": "https://m.media-amazon.com/images/S/aplus-media/vc/4fefce3b-4e20-4988-8a4c-49e9ae7c3f06.__CR0,0,650,350_PT0_SX650_V1___.jpg",
+            "type": "image"
+          }
+        ],
+        "seller_url": "https://www.amazon.com/sp?ie=UTF8&seller=ATVPDKIKX0DER&asin=B0863TXGM3",
+        "customer_says": "Customers praise the headphones' sound quality and excellent noise cancellation. The Bluetooth connectivity receives mixed feedback - while some can connect to two devices simultaneously, others report constant disconnections. Battery life is also mixed, with some finding it incredible while others report charging issues. Comfort opinions are divided, with some noting they can wear them all day without ear pain, while others find them extremely irritating. Value for money opinions are mixed, with some finding them absolutely worth the money while others consider them disappointing for the price.",
+        "sustainability_features": null,
+        "climate_pledge_friendly": false,
+        "videos": [
+          "https://www.amazon.com/vdp/058ee2d303854874ac9784dc42417b4b"
+        ],
+        "other_sellers_prices": [
+          {
+            "price": 462.89,
+            "price_per_unit": null,
+            "unit": null,
+            "delivery": "FREE delivery Monday, October 12. Or Prime members get FREE delivery Wednesday, October 7. Order within 12 hrs 30 mins. Join Prime",
+            "seller_name": "Amazon.com",
+            "seller_url": null,
+            "seller_rating": 4.5,
+            "ships_from": "Amazon.com",
+            "num_of_ratings": 42859
+          },
+          {
+            "price": 229.99,
+            "price_per_unit": null,
+            "unit": null,
+            "delivery": "FREE delivery Wednesday, October 14. Details",
+            "seller_name": "onlineshopping22",
+            "seller_url": "https://www.amazon.com/gp/aag/main?ie=UTF8&seller=ASAYU5AHHB7C9&isAmazonFulfilled=0&asin=B0863TXGM3&ref_=olp_merch_name_1",
+            "seller_rating": 3.5,
+            "ships_from": "onlineshopping22",
+            "num_of_ratings": 11
+          },
+          {
+            "price": 224.99,
+            "price_per_unit": null,
+            "unit": null,
+            "delivery": "$9.02 delivery October 8 - 13. Details",
+            "seller_name": "IMomsSpaghettiI",
+            "seller_url": "https://www.amazon.com/gp/aag/main?ie=UTF8&seller=A248DAB5QCMJ5H&isAmazonFulfilled=0&asin=B0863TXGM3&ref_=olp_merch_name_2",
+            "seller_rating": 3.5,
+            "ships_from": "IMomsSpaghettiI",
+            "num_of_ratings": 203
+          }
+        ],
+        "downloadable_videos": [
+          "https://m.media-amazon.com/images/S/vse-vms-transcoding-artifact-us-east-1-prod/4d456cd3-d418-48ce-bbfc-df2c4bd2c9c1/default.jobtemplate.hls.m3u8"
+        ],
+        "editorial_reviews": null,
+        "about_the_author": null,
+        "zipcode": "11001",
+        "coupon": null,
+        "sponsered": false,
+        "store_url": null,
+        "ships_from": null,
+        "city": null,
+        "customers_say": {
+          "text": "Customers praise the headphones' sound quality and excellent noise cancellation. The Bluetooth connectivity receives mixed feedback - while some can connect to two devices simultaneously, others report constant disconnections. Battery life is also mixed, with some finding it incredible while others report charging issues. Comfort opinions are divided, with some noting they can wear them all day without ear pain, while others find them extremely irritating. Value for money opinions are mixed, with some finding them absolutely worth the money while others consider them disappointing for the price.",
+          "keywords": {
+            "positive": [
+              "Sound quality",
+              "Noise cancellation"
+            ],
+            "negative": null,
+            "mixed": [
+              "Value for money",
+              "Bluetooth connectivity",
+              "Battery life"
+            ]
+          }
+        },
+        "max_quantity_available": 1,
+        "variations_values": null,
+        "language": null,
+        "return_policy": "FREE 30-day refund/replacement",
+        "inactive_buy_box": {
+          "price": 229.99,
+          "delivery": [
+            "FREE delivery Wednesday, October 14"
+          ]
+        },
+        "buybox_seller_rating": null,
+        "premium_brand": false,
+        "amazon_prime": true,
+        "coupon_description": null,
+        "all_badges": null,
+        "sponsored": false,
+        "category_tree": [
+          {
+            "name": "Electronics",
+            "url": "https://www.amazon.com/electronics-store/b/ref=dp_bc_1?ie=UTF8&node=172282"
+          },
+          {
+            "name": "Headphones, Earbuds & Accessories",
+            "url": "https://www.amazon.com/Headphones-Earbuds-Accessories/b/ref=dp_bc_2?ie=UTF8&node=24046923011"
+          },
+          {
+            "name": "Headphones & Earbuds",
+            "url": "https://www.amazon.com/Headphones-Accessories-Supplies/b/ref=dp_bc_3?ie=UTF8&node=172541"
+          }
+        ],
+        "variant_attributes": null,
+        "target_countries": [
+          "us"
+        ],
+        "category_urls": [
+          "https://www.amazon.com/electronics-store/b/ref=dp_bc_1?ie=UTF8&node=172282",
+          "https://www.amazon.com/Headphones-Earbuds-Accessories/b/ref=dp_bc_2?ie=UTF8&node=24046923011",
+          "https://www.amazon.com/Headphones-Accessories-Supplies/b/ref=dp_bc_3?ie=UTF8&node=172541"
+        ],
+        "safety_information": null,
+        "subcategory_link": [
+          {
+            "subcategory_name": "Over-Ear Headphones",
+            "subcategory_link": "https://www.amazon.com/gp/bestsellers/electronics/12097479011/ref=pd_zg_hrsr_electronics"
+          }
+        ],
+        "is_frequently_returned_item_badge": false,
+        "frequently_returned_item_message": null,
+        "is_customers_usually_keep": false,
+        "title_badge": null,
+        "review_videos": null,
+        "bought_past_month_text": "50+ bought in past month",
+        "is_high_price": false,
+        "title_highlight": null,
+        "title_clean": "Sony WH-1000XM4 Wireless Noise Cancelling Headphones, Black",
+        "customers_say_topics": [
+          {
+            "topic": "Sound quality",
+            "mentions_count": 3,
+            "positive_mentions_count": 2849,
+            "negative_mentions_count": 757,
+            "topic_description": "Customers love the sound quality of these headphones.",
+            "example_quotes": [
+              "...Overall, I do love the XM4s. They have great sound and while I also have AirPod Pros, the sounds that the XM4s produce sounds richer and warmer....",
+              "Great headphones, realistically if all you care about is sound quality and frequency response there are headohones that can do it better for cheaper...",
+              "...I was so impressed with the noise canceling and sound quality of the headphones that I wanted to upgrade because I am on so many airplanes these days..."
+            ]
+          },
+          {
+            "topic": "Noise cancellation",
+            "mentions_count": 1,
+            "positive_mentions_count": 1413,
+            "negative_mentions_count": 297,
+            "topic_description": "Customers praise the noise cancellation feature of these headphones.",
+            "example_quotes": [
+              "...is all on point— the audio quality, the microphone quality, the noise cancellation— but I rarely ever wear them because they get so warm, so quickly.",
+              "Literally, just the best product there is when looking for noise canceling. These headphones are what you want to ignore annoying background noise....",
+              "...With respect to the sound, noise cancelling, and comfort features, these headphones did not disappoint. This is review pertain to a quality issue...."
+            ]
+          },
+          {
+            "topic": "Value for money",
+            "mentions_count": 914,
+            "positive_mentions_count": 507,
+            "negative_mentions_count": 407,
+            "topic_description": "Customers have mixed opinions about the headphones' value for money, with some finding them absolutely worth the money and appreciating their sound quality, while others consider them disappointing for the price.",
+            "example_quotes": [
+              "...All in It's worth every penny and if you're on a budget, just wait until and coming holiday, they always go down from 350 to 270",
+              "...Definitely not worth the price at that point. It is great sound quality but for longevity it is not a good quality and won’t last.",
+              "...on, listening to music at another level, cost is up there but worth the money, right ear outer wall has a sensor that is cool too, learning how to..."
+            ]
+          }
+        ],
+        "brand_url": null,
+        "variant_condition": "Buy New",
+        "is_aplus_premium": true,
+        "timestamp": "2026-10-05T09:14:32.065Z",
+        "input": {
+          "url": "https://www.amazon.com/dp/B0863TXGM3",
+          "asin": "",
+          "zipcode": "",
+          "language": ""
+        }
+      }
+    ]
+  }
+}
