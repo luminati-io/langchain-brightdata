@@ -21,13 +21,18 @@ from typing import Any, Dict, get_args
 import pytest
 from langchain_core.tools import BaseTool
 
-from langchain_brightdata import BrightDataSERP, BrightDataUnlocker, BrightDataWebScraperAPI
+from langchain_brightdata import (
+    BrightDataSERP,
+    BrightDataUnlocker,
+    BrightDataWebFetch,
+    BrightDataWebScraperAPI,
+)
 from langchain_brightdata.brightdata_scraper import DATASET_MAPPING
 
 SNAPSHOT = Path(__file__).parent / "snapshots" / "tool_contract.json"
 UPDATE_FLAG = "UPDATE_TOOL_CONTRACT"
 
-TOOLS = [BrightDataSERP, BrightDataUnlocker, BrightDataWebScraperAPI]
+TOOLS = [BrightDataSERP, BrightDataUnlocker, BrightDataWebFetch, BrightDataWebScraperAPI]
 
 
 def _tool_contract(tool: BaseTool) -> Dict[str, Any]:

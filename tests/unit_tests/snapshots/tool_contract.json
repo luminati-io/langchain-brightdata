@@ -32,6 +32,17 @@
         "url"
       ]
     },
+    "BrightDataWebFetch": {
+      "name": "brightdata_web_fetch",
+      "description": "Read one web page and return its content as markdown, including pages that block ordinary requests. Use it when you have a URL and need what the page says. Input is the page URL.",
+      "args": {
+        "url": "The full URL of the page to read, starting with https://",
+        "format": "How to return the page: \"markdown\" (default, best for reading), \"text\" (plain text) or \"html\" (the page source)."
+      },
+      "required": [
+        "url"
+      ]
+    },
     "BrightDataWebScraperAPI": {
       "name": "brightdata_web_scraper",
       "description": "Extract structured data from 45+ websites. Use 'dataset_type' to specify the data source (e.g., 'amazon_product' for Amazon products, 'linkedin_person_profile' for LinkedIn profiles). Most datasets only require 'url'. Special cases: amazon_product_search needs 'keyword', linkedin_people_search needs 'first_name' and 'last_name', facebook_company_reviews needs 'num_of_reviews'.",

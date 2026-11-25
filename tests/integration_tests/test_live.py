@@ -16,6 +16,7 @@ import requests
 from langchain_brightdata import (
     BrightDataSERP,
     BrightDataUnlocker,
+    BrightDataWebFetch,
     BrightDataWebScraperAPI,
 )
 from langchain_brightdata._utilities import BrightDataSERPAPIWrapper
@@ -61,6 +62,24 @@ def test_search_creates_a_missing_zone(fake_api_key: str) -> None:
     assert "brightdata.com" in text.lower(), (
         f"Search through the new zone {zone} did not return a result from brightdata.com. "
         f"The wrapper returned: {_shown(text)}"
+    )
+
+
+def test_web_fetch_returns_the_page() -> None:
+    text = _text(BrightDataWebFetch().invoke({"url": "https://example.com"}))
+
+    assert "documentation examples" in text, (
+        "Reading https://example.com with BrightDataWebFetch did not return the page text. "
+        f"The tool returned: {_shown(text)}"
+    )
+
+
+def test_web_fetch_reports_a_missing_page() -> None:
+    text = _text(BrightDataWebFetch().invoke({"url": "https://example.com/no-such-page-404"}))
+
+    assert "Could not read" in text, (
+        "A page that does not exist should come back as an error the agent can read. "
+        f"The tool returned: {_shown(text)}"
     )
 
 

@@ -14,6 +14,8 @@ from langchain_brightdata import (
     BrightDataSERPAPIWrapper,
     BrightDataUnlocker,
     BrightDataUnlockerAPIWrapper,
+    BrightDataWebFetch,
+    BrightDataWebFetchAPIWrapper,
     BrightDataWebScraperAPI,
     BrightDataWebScraperAPIWrapper,
 )
@@ -57,6 +59,24 @@ class TestBrightDataUnlockerStandard(ToolsUnitTests):
     @property
     def init_from_env_params(self) -> Tuple[Dict[str, str], Dict[str, Any], Dict[str, Any]]:
         return ENV, {}, {"api_wrapper": BrightDataUnlockerAPIWrapper(bright_data_api_key=ENV_KEY)}
+
+
+class TestBrightDataWebFetchStandard(ToolsUnitTests):
+    @property
+    def tool_constructor(self) -> Type[BrightDataWebFetch]:
+        return BrightDataWebFetch
+
+    @property
+    def tool_constructor_params(self) -> Dict[str, Any]:
+        return {"bright_data_api_key": API_KEY}
+
+    @property
+    def tool_invoke_params_example(self) -> Dict[str, Any]:
+        return {"url": "https://example.com"}
+
+    @property
+    def init_from_env_params(self) -> Tuple[Dict[str, str], Dict[str, Any], Dict[str, Any]]:
+        return ENV, {}, {"api_wrapper": BrightDataWebFetchAPIWrapper(bright_data_api_key=ENV_KEY)}
 
 
 class TestBrightDataWebScraperAPIStandard(ToolsUnitTests):
