@@ -32,11 +32,23 @@ def _shown(text: str) -> str:
     return repr(text[:300])
 
 
+def _has_search_results(text: str) -> bool:
+    """Real results: parsed JSON with organic links, or a full raw results page.
+
+    Checks the shape, not one site: which sites rank changes by day and by proxy location.
+    """
+    try:
+        organic = json.loads(text).get("organic") or []
+    except (ValueError, AttributeError):
+        return len(text) > 5000 and "bright data" in text.lower()
+    return any(isinstance(item, dict) and item.get("link") for item in organic)
+
+
 def test_search_returns_real_results() -> None:
     text = _text(BrightDataSERP().invoke({"query": "bright data"}))
 
-    assert "brightdata.com" in text.lower(), (
-        "Search for 'bright data' did not return a result from brightdata.com. "
+    assert _has_search_results(text), (
+        "Search for 'bright data' did not return search results. "
         f"The tool returned: {_shown(text)}"
     )
 
@@ -59,8 +71,8 @@ def test_search_creates_a_missing_zone(fake_api_key: str) -> None:
             timeout=120,
         )
 
-    assert "brightdata.com" in text.lower(), (
-        f"Search through the new zone {zone} did not return a result from brightdata.com. "
+    assert _has_search_results(text), (
+        f"Search through the new zone {zone} did not return search results. "
         f"The wrapper returned: {_shown(text)}"
     )
 
@@ -83,11 +95,15 @@ def test_web_fetch_reports_a_missing_page() -> None:
     )
 
 
-def test_page_read_returns_the_page() -> None:
-    text = _text(BrightDataUnlocker().invoke({"url": "https://example.com"}))
+def test_old_unlocker_reads_the_page_or_points_to_web_fetch() -> None:
+    """The deprecated tool needs an "unlocker" zone. Without one it must name the new tool."""
+    with pytest.warns(DeprecationWarning, match="BrightDataWebFetch"):
+        tool = BrightDataUnlocker()
 
-    assert "Example Domain" in text, (
-        "Reading https://example.com did not return the page text. "
+    text = _text(tool.invoke({"url": "https://example.com"}))
+
+    assert "Example Domain" in text or "BrightDataWebFetch" in text, (
+        "BrightDataUnlocker returned neither the page nor a pointer to BrightDataWebFetch. "
         f"The tool returned: {_shown(text)}"
     )
 

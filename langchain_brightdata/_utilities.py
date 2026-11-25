@@ -114,7 +114,14 @@ class BrightDataUnlockerAPIWrapper(BrightDataAPIWrapper):
             json=params,
             headers=self._get_headers(),
         )
-        
+
+        if _zone_missing(response):
+            raise ValueError(
+                f'Bright Data zone "{zone}" does not exist in this account. BrightDataUnlocker '
+                "is deprecated: use BrightDataWebFetch, which reads pages with only an API key "
+                "and needs no zone."
+            )
+
         return response.text
     
 
