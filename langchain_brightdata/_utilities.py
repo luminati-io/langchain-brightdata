@@ -1,4 +1,5 @@
 """Utility for Bright Data API interactions."""
+import re
 import time
 import urllib.parse
 from typing import Any, Dict, Literal, Optional
@@ -9,6 +10,29 @@ from langchain_core.utils import get_from_dict_or_env
 from pydantic import BaseModel, ConfigDict, SecretStr, model_validator
 
 BRIGHTDATA_API_URL = "https://api.brightdata.com"
+
+# Seconds. Measured on 2026-11-25: POST /zone took 32-52 s, and a new zone went on
+# answering "not found" for up to 145 s after that.
+SEARCH_TIMEOUT = 60
+ZONE_CREATE_TIMEOUT = 120
+ZONE_READY_TIMEOUT = 240
+ZONE_READY_POLL = 5
+
+_ZONE_NOT_FOUND = re.compile(r'zone ".*" not found')
+
+
+def _zone_missing(response: requests.Response) -> bool:
+    """Bright Data reports a missing zone as HTTP 400 text or as a header on an empty 200."""
+    if response.headers.get("x-brd-err-code") == "client_10002":
+        return True
+    return response.status_code >= 400 and bool(_ZONE_NOT_FOUND.search(response.text))
+
+
+def _error_detail(response: requests.Response) -> str:
+    """What Bright Data said about an empty reply, for an error message."""
+    reason = response.headers.get("x-brd-err-msg") or response.headers.get("x-brd-error")
+    return f" (Bright Data said: {reason[:200]})" if reason else " (empty reply)"
+
 
 class BrightDataAPIWrapper(BaseModel):
     """Base wrapper for Bright Data API."""
@@ -160,13 +184,59 @@ class BrightDataSERPAPIWrapper(BrightDataAPIWrapper):
         
         request_params = {k: v for k, v in request_params.items() if v is not None}
 
-        response = requests.post(
+        response = self._send_search(request_params)
+        if _zone_missing(response):
+            # A new account has no SERP API zone. Create it, then search until it answers:
+            # a zone made through the API can report "not found" for a couple of minutes.
+            self._create_serp_zone(zone)
+            deadline = time.monotonic() + ZONE_READY_TIMEOUT
+            # The loop always ends: it stops at the first real reply or at the deadline.
+            while True:
+                response = self._send_search(request_params)
+                missing = _zone_missing(response)
+                # A zone that is still warming up can also answer 200 with an empty body.
+                if not missing and response.text.strip():
+                    break
+                if time.monotonic() >= deadline:
+                    detail = "" if missing else _error_detail(response)
+                    raise ValueError(
+                        f'Bright Data search zone "{zone}" was created but is not ready yet'
+                        f"{detail}. Try the search again in a minute."
+                    )
+                time.sleep(ZONE_READY_POLL)
+
+        return response.text
+
+    def _send_search(self, request_params: Dict[str, Any]) -> requests.Response:
+        return requests.post(
             f"{BRIGHTDATA_API_URL}/request",
             json=request_params,
             headers=self._get_headers(),
+            timeout=SEARCH_TIMEOUT,
         )
 
-        return response.text
+    def _create_serp_zone(self, zone: Optional[str]) -> None:
+        """Create a SERP API zone in the account. The caller waits until it answers."""
+        try:
+            response = requests.post(
+                f"{BRIGHTDATA_API_URL}/zone",
+                json={
+                    "zone": {"name": zone, "type": "unblocker"},
+                    "plan": {"type": "unblocker", "serp": True},
+                },
+                headers=self._get_headers(),
+                timeout=ZONE_CREATE_TIMEOUT,
+            )
+        except requests.exceptions.Timeout:
+            # Bright Data goes on creating the zone after the client gives up.
+            return
+        if response.status_code not in (200, 201):
+            raise ValueError(
+                f'Bright Data search zone "{zone}" does not exist and could not be created '
+                f"(HTTP {response.status_code}: {response.text[:200]}). Create a SERP API zone "
+                f'named "{zone}" at https://brightdata.com/cp/zones, or use an API key with the '
+                "Admin or Ops role."
+            )
 
 
 class BrightDataWebScraperAPIWrapper(BrightDataAPIWrapper):
