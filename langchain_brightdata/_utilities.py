@@ -18,6 +18,11 @@ ZONE_CREATE_TIMEOUT = 120
 ZONE_READY_TIMEOUT = 240
 ZONE_READY_POLL = 5
 
+# The Fetch API: one page per call, no zone. Tool format -> field in the reply.
+FETCH_DATASET_ID = "gd_m6gjtfmeh43we6cqc"
+FETCH_FIELDS = {"markdown": "markdown", "text": "html2text", "html": "page_html"}
+FETCH_TIMEOUT = 45
+
 _ZONE_NOT_FOUND = re.compile(r'zone ".*" not found')
 
 
@@ -112,6 +117,70 @@ class BrightDataUnlockerAPIWrapper(BrightDataAPIWrapper):
         
         return response.text
     
+
+class BrightDataWebFetchAPIWrapper(BrightDataAPIWrapper):
+    """Wrapper for the Bright Data Fetch API. Reads one page; needs no zone."""
+
+    def fetch_page(self, url: str, format: str = "markdown") -> str:
+        """Return the page at `url` as markdown, plain text or HTML.
+
+        Raises ValueError with what went wrong when the page cannot be read.
+        """
+        if format not in FETCH_FIELDS:
+            raise ValueError(f'format must be one of {", ".join(FETCH_FIELDS)}, not "{format}"')
+        try:
+            response = requests.post(
+                f"{BRIGHTDATA_API_URL}/datasets/v3/scrape",
+                params={
+                    "dataset_id": FETCH_DATASET_ID,
+                    "format": "json",
+                    "include_errors": "true",
+                },
+                json=[{"url": url}],
+                headers=self._get_headers(),
+                timeout=FETCH_TIMEOUT,
+            )
+        except requests.exceptions.Timeout:
+            raise ValueError(
+                f"Could not read {url}: the page did not load in time ({FETCH_TIMEOUT} s). "
+                "It is likely blocked or very slow."
+            ) from None
+        if response.status_code == 202:
+            raise ValueError(
+                f"Could not read {url}: the page did not load in time. "
+                "It is likely blocked or very slow."
+            )
+        if response.status_code in (401, 403):
+            raise ValueError(
+                f"Could not read {url}: Bright Data refused the API key "
+                f"(HTTP {response.status_code}: {response.text[:200]}). Check BRIGHT_DATA_API_KEY."
+            )
+        if response.status_code >= 400:
+            raise ValueError(
+                f"Could not read {url}: Bright Data answered HTTP {response.status_code}: "
+                f"{response.text[:200]}"
+            )
+
+        records = response.json()
+        record = records[0] if isinstance(records, list) and records else None
+        if not isinstance(record, dict):
+            raise ValueError(f"Could not read {url}: Bright Data returned nothing. Try once more.")
+        if record.get("error_code") or record.get("error"):
+            raise ValueError(
+                f"Could not read {url}: {record.get('error') or 'the page failed'} "
+                f"({record.get('error_code') or 'no error code'})"
+            )
+
+        # A page can lack one format (for example markdown); fall back to the readable ones.
+        for name in [format] + [other for other in ("markdown", "text") if other != format]:
+            content = record.get(FETCH_FIELDS[name])
+            if isinstance(content, str) and content.strip():
+                return content
+        raise ValueError(
+            f"Could not read {url}: the page returned no text. "
+            "It probably needs JavaScript or blocked the request."
+        )
+
 
 class BrightDataSERPAPIWrapper(BrightDataAPIWrapper):
     """Wrapper for Bright Data SERP API."""
