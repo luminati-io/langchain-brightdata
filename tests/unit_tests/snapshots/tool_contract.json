@@ -9,7 +9,6 @@
         "search_engine": "Search engine to use for the query: \"google\" or \"bing\".\n\n        Default is \"google\".\n        ",
         "country": "Two-letter country code for localized search results.\n        \n        Examples: \"us\", \"gb\", \"de\", \"jp\", etc.\n        \n        Default is \"us\".\n        ",
         "language": "Two-letter language code for the search results.\n        \n        Examples: \"en\", \"es\", \"fr\", \"de\", etc.\n        \n        Default is \"en\".\n        ",
-        "results_count": "Number of search results to return.\n        \n        Default is 10. Maximum value is typically 100.\n        ",
         "search_type": "Type of search to perform.\n        \n        Options include:\n        - None (default): Regular web search\n        - \"isch\": Images search\n        - \"shop\": Shopping search\n        - \"nws\": News search\n        - \"jobs\": Jobs search\n        ",
         "device_type": "Device type to simulate for the search.\n        \n        Options include:\n        - None (default): Desktop device\n        - \"mobile\": Generic mobile device\n        - \"ios\": iOS device (iPhone)\n        - \"android\": Android device\n        ",
         "parse_results": "Whether to return parsed JSON results.\n        \n        Default is True, which returns structured JSON.\n        Set to False to get raw HTML response.\n        "

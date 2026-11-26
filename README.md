@@ -102,8 +102,7 @@ results = serp.invoke({
     "query": "electric vehicles",
     "country": "de",
     "language": "de",
-    "search_type": "news",
-    "results_count": 20
+    "search_type": "news"
 })
 ```
 
@@ -116,10 +115,11 @@ results = serp.invoke({
 | `search_engine` | str | `"google"` | Search engine (`google` or `bing`) |
 | `country` | str | `"us"` | Two-letter country code |
 | `language` | str | `"en"` | Two-letter language code |
-| `results_count` | int | `10` | Number of results (max 100) |
 | `search_type` | str | `None` | `None` (web), `"isch"` (images), `"shop"`, `"nws"` (news), `"jobs"` |
 | `device_type` | str | `None` | `None` (desktop), `"mobile"`, `"ios"`, `"android"` |
 | `parse_results` | bool | `False` | Return structured JSON |
+
+Each search returns about 10 results. `results_count` no longer does anything, because Google and Bing stopped letting a request choose the number of results. It is still accepted so existing code keeps working, and will be removed in 0.4.0.
 
 ---
 
