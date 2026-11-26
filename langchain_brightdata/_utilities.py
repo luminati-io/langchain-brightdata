@@ -25,6 +25,8 @@ SEARCH_ENGINES = ("google", "bing")
 SEARCH_RETRY_WAIT = 15
 # Failures that the same request will hit again: the caller has to change something first.
 _RATE_LIMIT_CODES = ("sr_rate_limit", "bucket_rate_limit", "client_10110")
+# The 15-second block on one query. Sent as HTTP 429, but waiting does fix it.
+_QUERY_BLOCKED_CODES = ("failed_query_rejected", "repeat_query_rejected")
 
 # The Fetch API: one page per call, no zone. Tool format -> field in the reply.
 FETCH_DATASET_ID = "gd_m6gjtfmeh43we6cqc"
@@ -67,22 +69,34 @@ def _search_failed(response: requests.Response) -> bool:
 
 
 def _search_can_retry(response: requests.Response) -> bool:
-    """False when the same request would fail the same way: bad key or rate limit."""
+    """False when the same request would fail the same way: bad key, bad request, rate limit."""
     code = _error_code(response)
-    if response.status_code in (401, 403) or code.startswith("client_"):
+    if code in _QUERY_BLOCKED_CODES:
+        return True
+    if 400 <= response.status_code < 500 or code.startswith("client_"):
         return False
     return code not in _RATE_LIMIT_CODES
 
 
+def _is_rate_limit(response: requests.Response) -> bool:
+    code = _error_code(response)
+    if code in _QUERY_BLOCKED_CODES:
+        return False
+    return response.status_code == 429 or code in _RATE_LIMIT_CODES
+
+
 def _search_error(response: requests.Response, engine: str, query: str, tries: int) -> str:
     """What failed, what Bright Data said, and what to do next."""
-    if response.status_code in (401, 403):
-        return (
-            f"Bright Data rejected the API key (HTTP {response.status_code}). "
-            "Check the BRIGHT_DATA_API_KEY value."
-        )
     reason = _error_reason(response)
     code = _error_code(response)
+    status = response.status_code
+    if len(query) > 100:
+        query = query[:100] + "..."
+    if status in (401, 403) and not reason:
+        return (
+            f"Bright Data rejected the API key (HTTP {status}). "
+            "Check the BRIGHT_DATA_API_KEY value."
+        )
     if reason and code:
         said = f"{reason} [{code}]"
     elif reason or code:
@@ -91,10 +105,18 @@ def _search_error(response: requests.Response, engine: str, query: str, tries: i
         said = f"HTTP {response.status_code}: {response.text.strip()[:200]}"
     else:
         said = f"HTTP {response.status_code} with an empty reply"
-    if code in _RATE_LIMIT_CODES:
+    if _is_rate_limit(response):
         next_step = "Send fewer searches per minute, then try again."
-    elif code.startswith("client_"):
-        next_step = "Fix this in the Bright Data account, then try again."
+    elif status in (401, 403):
+        next_step = (
+            f"Bright Data refused the request (HTTP {status}). Check the API key and that "
+            "the zone is active in the Bright Data account."
+        )
+    elif not _search_can_retry(response):
+        next_step = (
+            "The same search will fail the same way. Check the query and the search "
+            "settings, or the Bright Data account."
+        )
     else:
         next_step = (
             f"This is usually temporary. Wait {SEARCH_RETRY_WAIT} seconds before searching "
@@ -287,10 +309,12 @@ class BrightDataSERPAPIWrapper(BrightDataAPIWrapper):
         Returns:
             Dictionary containing the search results
         """
-        if search_engine not in SEARCH_ENGINES:
+        engine = search_engine.strip().lower() if isinstance(search_engine, str) else ""
+        if engine not in SEARCH_ENGINES:
             raise ValueError(
                 f'search_engine must be "google" or "bing". Got "{search_engine}".'
             )
+        search_engine = engine
         asked = query
         query = urllib.parse.quote(query)
         url = f"https://www.{search_engine}.com/search?q={query}"
@@ -339,13 +363,17 @@ class BrightDataSERPAPIWrapper(BrightDataAPIWrapper):
             # a zone made through the API can report "not found" for a couple of minutes.
             self._create_serp_zone(zone)
             deadline = time.monotonic() + ZONE_READY_TIMEOUT
-            # The loop always ends: it stops at the first real reply or at the deadline.
+            # The loop always ends: it stops at the first real reply, at a failure that
+            # waiting cannot fix (bad key, rate limit), or at the deadline.
             while True:
                 response = self._send_search(request_params)
                 missing = _zone_missing(response)
-                # A zone that is still warming up can also answer 200 with an empty body.
-                if not missing and response.text.strip():
-                    break
+                # A zone that is still warming up can also answer 200 with an empty body,
+                # or with the 15-second block on the query that just failed.
+                if not missing and not _search_failed(response):
+                    return response.text
+                if not missing and not _search_can_retry(response):
+                    raise ValueError(_search_error(response, search_engine, asked, 1))
                 if time.monotonic() >= deadline:
                     detail = "" if missing else _error_detail(response)
                     raise ValueError(
@@ -357,8 +385,12 @@ class BrightDataSERPAPIWrapper(BrightDataAPIWrapper):
         tries = 1
         if _search_failed(response) and _search_can_retry(response):
             time.sleep(SEARCH_RETRY_WAIT)
-            response = self._send_search(request_params)
             tries = 2
+            try:
+                response = self._send_search(request_params)
+            except ValueError:
+                # The second try got no reply at all: report the reason from the first.
+                pass
         if _search_failed(response):
             raise ValueError(_search_error(response, search_engine, asked, tries))
 

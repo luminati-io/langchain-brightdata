@@ -1,4 +1,4 @@
-from typing import Any, Dict, Literal, Optional, Type
+from typing import Any, Dict, Optional, Type
 
 from langchain_core.callbacks import (
     CallbackManagerForToolRun,
@@ -23,12 +23,15 @@ class BrightDataSERPInput(BaseModel):
         """
     )
 
-    search_engine: Optional[Literal["google", "bing"]] = Field(
+    search_engine: Optional[str] = Field(
         default="google",
         description="""Search engine to use for the query: "google" or "bing".
 
         Default is "google".
-        """
+        """,
+        # Shown to the model as the only choices. A wrong value is answered with a
+        # readable error from the wrapper instead of a validation exception.
+        json_schema_extra={"enum": ["google", "bing"]},
     )
     
     country: Optional[str] = Field(
@@ -112,7 +115,7 @@ class BrightDataSERP(BaseTool):
     handle_tool_error: bool = True
 
     zone: str = "serp"
-    search_engine: Literal["google", "bing"] = "google"
+    search_engine: str = "google"
     country: str = "us"
     language: str = "en"
     results_count: Optional[int] = 10

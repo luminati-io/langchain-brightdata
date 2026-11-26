@@ -221,9 +221,21 @@ def test_the_tool_offers_only_google_and_bing_to_the_model():
     assert "yahoo" not in options
 
 
-def test_the_tool_cannot_be_built_with_another_engine():
-    with pytest.raises(ValueError):
-        BrightDataSERP(search_engine="yahoo")
+def test_a_refused_engine_reaches_the_agent_as_text_not_as_an_exception():
+    with responses.RequestsMock() as mock:
+        shown = BrightDataSERP().invoke({"query": "pizza", "search_engine": "yahoo"})
+        assert len(mock.calls) == 0
+
+    assert shown == 'search_engine must be "google" or "bing". Got "yahoo".'
+
+
+@pytest.mark.parametrize("engine", ["Google", "BING", " bing "])
+def test_engine_names_are_not_case_sensitive(rsps, waits, engine):
+    rsps.add(responses.POST, REQUEST_URL, body=RESULTS, status=200)
+
+    assert search(search_engine=engine) == RESULTS
+    sent = json.loads(rsps.calls[0].request.body)["url"]
+    assert sent.startswith(f"https://www.{engine.strip().lower()}.com/search?q=pizza")
 
 
 @pytest.mark.parametrize(
@@ -241,3 +253,117 @@ def test_no_reply_is_a_clear_error_too(rsps, waits, failure, words):
     assert words in shown and "try the search again" in shown.lower()
     assert "HTTPSConnectionPool" not in shown
     assert waits == []
+
+
+# Found by an independent review of the first version of this change.
+ZONE_URL = "https://api.brightdata.com/zone"
+
+
+def new_zone(rsps):
+    """The account has no zone: the first search says so, then the zone is created."""
+    rsps.add(responses.POST, REQUEST_URL, body='zone "serp" not found', status=400)
+    rsps.add(responses.POST, ZONE_URL, json={"zone": {"created": "2026-11-26"}}, status=200)
+
+
+@pytest.mark.parametrize("name", NO_RETRY)
+def test_a_new_zone_does_not_hide_a_failure_that_waiting_cannot_fix(rsps, waits, name):
+    reply, next_step = NO_RETRY[name]
+    new_zone(rsps)
+    rsps.add(responses.POST, REQUEST_URL, **reply)
+
+    with pytest.raises(ValueError, match=next_step):
+        search()
+
+    assert len(rsps.calls) == 3
+    assert waits == []
+
+
+def test_a_new_zone_keeps_waiting_through_the_15_second_block(rsps, waits):
+    new_zone(rsps)
+    rsps.add(responses.POST, REQUEST_URL, body="", status=200)
+    rsps.add(responses.POST, REQUEST_URL, **FAILURES["query blocked for 15 seconds"])
+    rsps.add(responses.POST, REQUEST_URL, body="", status=200)
+    rsps.add(responses.POST, REQUEST_URL, body=RESULTS, status=200)
+
+    assert search() == RESULTS
+    assert waits == [5, 5, 5]
+
+
+@pytest.mark.parametrize(
+    "reply, next_step",
+    [
+        ({"status": 429, "body": "Too Many Requests", "headers": {}}, "fewer searches"),
+        (
+            {"status": 429, "body": "", "headers": {"x-brd-error-code": "bucket_rate_limit"}},
+            "fewer searches",
+        ),
+        ({"status": 429, "body": "", "headers": {"x-brd-err-code": "sr_rate_limit"}}, "fewer"),
+        ({"status": 400, "body": "Invalid url", "headers": {}}, "will fail the same way"),
+        ({"status": 404, "body": "Not found", "headers": {}}, "will fail the same way"),
+    ],
+)
+def test_rate_limits_and_bad_requests_are_not_retried(rsps, waits, reply, next_step):
+    rsps.add(responses.POST, REQUEST_URL, **reply)
+
+    with pytest.raises(ValueError, match=next_step) as error:
+        search()
+
+    assert "usually temporary" not in str(error.value)
+    assert len(rsps.calls) == 1
+    assert waits == []
+
+
+@pytest.mark.parametrize("code", ["failed_query_rejected", "repeat_query_rejected"])
+def test_the_15_second_block_is_retried_even_when_sent_as_http_429(rsps, waits, code):
+    rsps.add(
+        responses.POST,
+        REQUEST_URL,
+        status=429,
+        body="",
+        headers={"x-brd-error": RECENTLY_FAILED, "x-brd-error-code": code},
+    )
+    rsps.add(responses.POST, REQUEST_URL, body=RESULTS, status=200)
+
+    assert search() == RESULTS
+    assert waits == [15]
+
+
+def test_a_403_shows_the_reason_bright_data_gave(rsps, waits):
+    rsps.add(
+        responses.POST,
+        REQUEST_URL,
+        status=403,
+        body="",
+        headers={"x-brd-error": "Zone is suspended", "x-brd-error-code": "client_10030"},
+    )
+
+    with pytest.raises(ValueError) as error:
+        search()
+
+    message = str(error.value)
+    assert "Zone is suspended [client_10030]" in message
+    assert "rejected the API key" not in message
+    assert len(rsps.calls) == 1
+
+
+def test_when_the_second_try_gets_no_reply_the_first_reason_is_kept(rsps, waits):
+    rsps.add(responses.POST, REQUEST_URL, **FAILURES["captcha"])
+    rsps.add(responses.POST, REQUEST_URL, body=requests.exceptions.ReadTimeout("slow"))
+
+    with pytest.raises(ValueError) as error:
+        search()
+
+    message = str(error.value)
+    assert 'Google search for "pizza" failed after 2 tries' in message
+    assert "google_captcha detected" in message
+
+
+def test_a_very_long_query_is_shortened_in_the_message(rsps, waits):
+    reply = FAILURES["captcha"]
+    rsps.add(responses.POST, REQUEST_URL, **reply)
+    rsps.add(responses.POST, REQUEST_URL, **reply)
+
+    with pytest.raises(ValueError) as error:
+        BrightDataSERPAPIWrapper().get_search_results("x" * 5000)
+
+    assert len(str(error.value)) < 500
