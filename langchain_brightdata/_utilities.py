@@ -2,10 +2,12 @@
 import re
 import time
 import urllib.parse
+import warnings
 from typing import Any, Dict, Literal, Optional
 
 import aiohttp
 import requests
+from langchain_core._api import LangChainDeprecationWarning
 from langchain_core.utils import get_from_dict_or_env
 from pydantic import BaseModel, ConfigDict, SecretStr, model_validator
 
@@ -34,6 +36,17 @@ FETCH_FIELDS = {"markdown": "markdown", "text": "html2text", "html": "page_html"
 FETCH_TIMEOUT = 45
 
 _ZONE_NOT_FOUND = re.compile(r'zone ".*" not found')
+
+
+def warn_results_count(stacklevel: int = 2) -> None:
+    """Tell the developer that results_count no longer does anything."""
+    warnings.warn(
+        "results_count no longer does anything and will be removed in "
+        "langchain-brightdata 0.4.0. Google and Bing stopped letting a request choose "
+        "the number of results; each search returns about 10. Remove the setting.",
+        LangChainDeprecationWarning,
+        stacklevel=stacklevel,
+    )
 
 
 def _error_code(response: requests.Response) -> str:
@@ -289,7 +302,7 @@ class BrightDataSERPAPIWrapper(BrightDataAPIWrapper):
         search_engine: Optional[str] = "google",
         country: Optional[str] = "us",
         language: Optional[str] = "en",
-        results_count: Optional[int] = 10,
+        results_count: Optional[int] = None,
         search_type: Optional[str] = None,
         device_type: Optional[str] = None,
         parse_results: Optional[bool] = False,
@@ -301,7 +314,8 @@ class BrightDataSERPAPIWrapper(BrightDataAPIWrapper):
             search_engine: Search engine to use (default "google")
             country: Two-letter country code for geo-targeting (e.g., "us", "gb")
             language: Two-letter language code (e.g., "en", "es")
-            results_count: Number of results to return
+            results_count: Does nothing and will be removed in 0.4.0. Google and Bing
+                no longer let a request choose the number of results.
             search_type: Type of search (e.g., "shop", "news", "images")
             device_type: Device type to simulate ("desktop" (Deafult) or "mobile")
             parse_results: Whether to return parsed JSON results
@@ -327,8 +341,8 @@ class BrightDataSERPAPIWrapper(BrightDataAPIWrapper):
         if language:
             params.append(f"hl={language}")
         
-        if results_count:
-            params.append(f"num={results_count}")
+        if results_count is not None:
+            warn_results_count(stacklevel=3)
         
         if parse_results:
             params.append("brd_json=1")

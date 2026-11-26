@@ -6,7 +6,7 @@ from langchain_core.callbacks import (
 from langchain_core.tools import BaseTool, ToolException
 from pydantic import BaseModel, Field
 
-from ._utilities import BrightDataSERPAPIWrapper
+from ._utilities import BrightDataSERPAPIWrapper, warn_results_count
 
 
 class BrightDataSERPInput(BaseModel):
@@ -51,14 +51,6 @@ class BrightDataSERPInput(BaseModel):
         Examples: "en", "es", "fr", "de", etc.
         
         Default is "en".
-        """
-    )
-    
-    results_count: Optional[int] = Field(
-        default=10,
-        description="""Number of search results to return.
-        
-        Default is 10. Maximum value is typically 100.
         """
     )
     
@@ -118,7 +110,9 @@ class BrightDataSERP(BaseTool):
     search_engine: str = "google"
     country: str = "us"
     language: str = "en"
-    results_count: Optional[int] = 10
+    # Does nothing: Google and Bing no longer let a request choose the number of
+    # results. Still accepted so existing code keeps working. Removed in 0.4.0.
+    results_count: Optional[int] = None
     search_type: Optional[str] = None
     device_type: Optional[str] = None
     parse_results: bool = False
@@ -132,6 +126,9 @@ class BrightDataSERP(BaseTool):
                 bright_data_api_key=kwargs["bright_data_api_key"]
             )
 
+        if kwargs.get("results_count") is not None:
+            warn_results_count(stacklevel=3)
+
         super().__init__(**kwargs)
 
     def _run(
@@ -141,7 +138,6 @@ class BrightDataSERP(BaseTool):
         search_engine: Optional[str] = "google",
         country: Optional[str] = None,
         language: Optional[str] = None,
-        results_count: Optional[int] = None,
         search_type: Optional[str] = None,
         device_type: Optional[str] = None,
         parse_results: Optional[bool] = None,
@@ -153,7 +149,6 @@ class BrightDataSERP(BaseTool):
             search_engine_to_use = search_engine if search_engine is not None else self.search_engine
             country_to_use = country if country is not None else self.country
             language_to_use = language if language is not None else self.language
-            results_count_to_use = results_count if results_count is not None else self.results_count
             search_type_to_use = search_type if search_type is not None else self.search_type
             device_type_to_use = device_type if device_type is not None else self.device_type
             parse_results_to_use = parse_results if parse_results is not None else self.parse_results
@@ -164,7 +159,6 @@ class BrightDataSERP(BaseTool):
                 search_engine=search_engine_to_use,
                 country=country_to_use,
                 language=language_to_use,
-                results_count=results_count_to_use,
                 search_type=search_type_to_use,
                 device_type=device_type_to_use,
                 parse_results=parse_results_to_use,
