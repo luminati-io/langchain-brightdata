@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional, Type
+from typing import Any, Dict, Literal, Optional, Type
 
 from langchain_core.callbacks import (
     CallbackManagerForToolRun,
@@ -23,11 +23,11 @@ class BrightDataSERPInput(BaseModel):
         """
     )
 
-    search_engine: Optional[str] = Field(
+    search_engine: Optional[Literal["google", "bing"]] = Field(
         default="google",
-        description="""Search engine to use for the query.
-        
-        Default is "google". Other options include "bing", "yahoo", etc.
+        description="""Search engine to use for the query: "google" or "bing".
+
+        Default is "google".
         """
     )
     
@@ -112,7 +112,7 @@ class BrightDataSERP(BaseTool):
     handle_tool_error: bool = True
 
     zone: str = "serp"
-    search_engine: str = "google"
+    search_engine: Literal["google", "bing"] = "google"
     country: str = "us"
     language: str = "en"
     results_count: Optional[int] = 10
@@ -179,4 +179,7 @@ class BrightDataSERP(BaseTool):
         except Exception as e:
             if isinstance(e, ToolException):
                 raise e
+            if isinstance(e, ValueError):
+                # Already a full message: what failed, why, and what to do next.
+                raise ToolException(str(e))
             raise ToolException(f"Error performing search for '{query}': {e}")

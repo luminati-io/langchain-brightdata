@@ -18,6 +18,14 @@ ZONE_CREATE_TIMEOUT = 120
 ZONE_READY_TIMEOUT = 240
 ZONE_READY_POLL = 5
 
+# Only these two return structured results (measured 2026-11-26, 10 runs per engine).
+SEARCH_ENGINES = ("google", "bing")
+# Bright Data blocks a query for 15 seconds after it fails, so an instant retry cannot work:
+# https://docs.brightdata.com/scraping-automation/serp-api/debugging
+SEARCH_RETRY_WAIT = 15
+# Failures that the same request will hit again: the caller has to change something first.
+_RATE_LIMIT_CODES = ("sr_rate_limit", "bucket_rate_limit", "client_10110")
+
 # The Fetch API: one page per call, no zone. Tool format -> field in the reply.
 FETCH_DATASET_ID = "gd_m6gjtfmeh43we6cqc"
 FETCH_FIELDS = {"markdown": "markdown", "text": "html2text", "html": "page_html"}
@@ -26,17 +34,77 @@ FETCH_TIMEOUT = 45
 _ZONE_NOT_FOUND = re.compile(r'zone ".*" not found')
 
 
+def _error_code(response: requests.Response) -> str:
+    """Bright Data's short error code. Both header spellings are in use."""
+    headers = response.headers
+    return headers.get("x-brd-error-code") or headers.get("x-brd-err-code") or ""
+
+
+def _error_reason(response: requests.Response) -> str:
+    """Bright Data's own sentence about a failed request, or "" when it sent none."""
+    headers = response.headers
+    return (headers.get("x-brd-error") or headers.get("x-brd-err-msg") or "")[:200]
+
+
 def _zone_missing(response: requests.Response) -> bool:
     """Bright Data reports a missing zone as HTTP 400 text or as a header on an empty 200."""
-    if response.headers.get("x-brd-err-code") == "client_10002":
+    if _error_code(response) == "client_10002":
         return True
     return response.status_code >= 400 and bool(_ZONE_NOT_FOUND.search(response.text))
 
 
 def _error_detail(response: requests.Response) -> str:
     """What Bright Data said about an empty reply, for an error message."""
-    reason = response.headers.get("x-brd-err-msg") or response.headers.get("x-brd-error")
-    return f" (Bright Data said: {reason[:200]})" if reason else " (empty reply)"
+    reason = _error_reason(response)
+    return f" (Bright Data said: {reason})" if reason else " (empty reply)"
+
+
+def _search_failed(response: requests.Response) -> bool:
+    """A failed search is often HTTP 200 with an empty body and the reason in a header."""
+    if response.status_code >= 400 or not response.text.strip():
+        return True
+    return bool(_error_code(response) or _error_reason(response))
+
+
+def _search_can_retry(response: requests.Response) -> bool:
+    """False when the same request would fail the same way: bad key or rate limit."""
+    code = _error_code(response)
+    if response.status_code in (401, 403) or code.startswith("client_"):
+        return False
+    return code not in _RATE_LIMIT_CODES
+
+
+def _search_error(response: requests.Response, engine: str, query: str, tries: int) -> str:
+    """What failed, what Bright Data said, and what to do next."""
+    if response.status_code in (401, 403):
+        return (
+            f"Bright Data rejected the API key (HTTP {response.status_code}). "
+            "Check the BRIGHT_DATA_API_KEY value."
+        )
+    reason = _error_reason(response)
+    code = _error_code(response)
+    if reason and code:
+        said = f"{reason} [{code}]"
+    elif reason or code:
+        said = reason or code
+    elif response.text.strip():
+        said = f"HTTP {response.status_code}: {response.text.strip()[:200]}"
+    else:
+        said = f"HTTP {response.status_code} with an empty reply"
+    if code in _RATE_LIMIT_CODES:
+        next_step = "Send fewer searches per minute, then try again."
+    elif code.startswith("client_"):
+        next_step = "Fix this in the Bright Data account, then try again."
+    else:
+        next_step = (
+            f"This is usually temporary. Wait {SEARCH_RETRY_WAIT} seconds before searching "
+            "the same query again, or reword the query."
+        )
+    attempts = "after 2 tries" if tries > 1 else "and was not retried"
+    return (
+        f'{engine.capitalize()} search for "{query}" failed {attempts} '
+        f"(Bright Data said: {said}). {next_step}"
+    )
 
 
 class BrightDataAPIWrapper(BaseModel):
@@ -219,6 +287,11 @@ class BrightDataSERPAPIWrapper(BrightDataAPIWrapper):
         Returns:
             Dictionary containing the search results
         """
+        if search_engine not in SEARCH_ENGINES:
+            raise ValueError(
+                f'search_engine must be "google" or "bing". Got "{search_engine}".'
+            )
+        asked = query
         query = urllib.parse.quote(query)
         url = f"https://www.{search_engine}.com/search?q={query}"
         
@@ -281,15 +354,34 @@ class BrightDataSERPAPIWrapper(BrightDataAPIWrapper):
                     )
                 time.sleep(ZONE_READY_POLL)
 
+        tries = 1
+        if _search_failed(response) and _search_can_retry(response):
+            time.sleep(SEARCH_RETRY_WAIT)
+            response = self._send_search(request_params)
+            tries = 2
+        if _search_failed(response):
+            raise ValueError(_search_error(response, search_engine, asked, tries))
+
         return response.text
 
     def _send_search(self, request_params: Dict[str, Any]) -> requests.Response:
-        return requests.post(
-            f"{BRIGHTDATA_API_URL}/request",
-            json=request_params,
-            headers=self._get_headers(),
-            timeout=SEARCH_TIMEOUT,
-        )
+        try:
+            return requests.post(
+                f"{BRIGHTDATA_API_URL}/request",
+                json=request_params,
+                headers=self._get_headers(),
+                timeout=SEARCH_TIMEOUT,
+            )
+        except requests.exceptions.Timeout:
+            raise ValueError(
+                f"The search got no reply from Bright Data in {SEARCH_TIMEOUT} seconds. "
+                "Try the search again."
+            ) from None
+        except requests.exceptions.ConnectionError as error:
+            raise ValueError(
+                f"Could not reach Bright Data ({type(error).__name__}). "
+                "Check the network connection, then try the search again."
+            ) from None
 
     def _create_serp_zone(self, zone: Optional[str]) -> None:
         """Create a SERP API zone in the account. The caller waits until it answers."""
