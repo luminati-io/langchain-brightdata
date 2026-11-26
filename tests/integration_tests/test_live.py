@@ -53,6 +53,19 @@ def test_search_returns_real_results() -> None:
     )
 
 
+def test_bing_search_returns_real_results() -> None:
+    text = _text(
+        BrightDataSERP().invoke(
+            {"query": "bright data", "search_engine": "bing", "parse_results": True}
+        )
+    )
+
+    assert _has_search_results(text), (
+        "Bing search for 'bright data' did not return search results. "
+        f"The tool returned: {_shown(text)}"
+    )
+
+
 def test_search_creates_a_missing_zone(fake_api_key: str) -> None:
     """A zone name the account has never had: the wrapper creates it and still returns results.
 

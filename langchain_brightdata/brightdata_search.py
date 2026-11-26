@@ -25,10 +25,13 @@ class BrightDataSERPInput(BaseModel):
 
     search_engine: Optional[str] = Field(
         default="google",
-        description="""Search engine to use for the query.
-        
-        Default is "google". Other options include "bing", "yahoo", etc.
-        """
+        description="""Search engine to use for the query: "google" or "bing".
+
+        Default is "google".
+        """,
+        # Shown to the model as the only choices. A wrong value is answered with a
+        # readable error from the wrapper instead of a validation exception.
+        json_schema_extra={"enum": ["google", "bing"]},
     )
     
     country: Optional[str] = Field(
@@ -179,4 +182,7 @@ class BrightDataSERP(BaseTool):
         except Exception as e:
             if isinstance(e, ToolException):
                 raise e
+            if isinstance(e, ValueError):
+                # Already a full message: what failed, why, and what to do next.
+                raise ToolException(str(e))
             raise ToolException(f"Error performing search for '{query}': {e}")

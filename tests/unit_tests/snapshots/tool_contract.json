@@ -6,7 +6,7 @@
       "args": {
         "query": "Search query to perform with the SERP API",
         "zone": "Bright Data SERP API zone name.\n\n        This should match the zone name configured in your Bright Data account.\n        Default is \"serp\".\n        ",
-        "search_engine": "Search engine to use for the query.\n        \n        Default is \"google\". Other options include \"bing\", \"yahoo\", etc.\n        ",
+        "search_engine": "Search engine to use for the query: \"google\" or \"bing\".\n\n        Default is \"google\".\n        ",
         "country": "Two-letter country code for localized search results.\n        \n        Examples: \"us\", \"gb\", \"de\", \"jp\", etc.\n        \n        Default is \"us\".\n        ",
         "language": "Two-letter language code for the search results.\n        \n        Examples: \"en\", \"es\", \"fr\", \"de\", etc.\n        \n        Default is \"en\".\n        ",
         "results_count": "Number of search results to return.\n        \n        Default is 10. Maximum value is typically 100.\n        ",

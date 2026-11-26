@@ -113,7 +113,7 @@ results = serp.invoke({
 |-----------|------|---------|-------------|
 | `query` | str | required | Search query |
 | `zone` | str | `"serp"` | Bright Data zone name |
-| `search_engine` | str | `"google"` | Search engine (`google`, `bing`, `yahoo`) |
+| `search_engine` | str | `"google"` | Search engine (`google` or `bing`) |
 | `country` | str | `"us"` | Two-letter country code |
 | `language` | str | `"en"` | Two-letter language code |
 | `results_count` | int | `10` | Number of results (max 100) |

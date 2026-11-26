@@ -216,7 +216,7 @@ def test_other_errors_do_not_create_a_zone(rsps):
 
     result = BrightDataSERP().invoke({"query": "bright data"})
 
-    assert result == "Invalid token"
+    assert "rejected the API key (HTTP 401)" in result
     assert paths(rsps) == ["/request"]
 
 
